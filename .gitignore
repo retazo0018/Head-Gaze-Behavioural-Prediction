@@ -1,2 +1,7 @@
 Data/
-LIMU-BERT-Public/dataset/
+LIMU-BERT-Public/dataset/hgbd/
+LIMU-BERT-Public/dataset/hhar/
+LIMU-BERT-Public/dataset/motion/
+LIMU-BERT-Public/dataset/shoaib/
+LIMU-BERT-Public/dataset/uci/
+LIMU-BERT-Public/saved/

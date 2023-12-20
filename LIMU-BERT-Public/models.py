@@ -131,7 +131,7 @@ class Transformer(nn.Module):
     """ Transformer with Self-Attentive Blocks"""
     def __init__(self, cfg):
         super().__init__()
-        self.embed = Embeddings(cfg)
+        # self.embed = Embeddings(cfg)
         # Original BERT not used parameter-sharing strategies
         # self.blocks = nn.ModuleList([Block(cfg) for _ in range(cfg.n_layers)])
 
@@ -145,11 +145,11 @@ class Transformer(nn.Module):
         # self.drop = nn.Dropout(cfg.p_drop_hidden)
 
     def forward(self, x):
-        h = self.embed(x)
+        # h = self.embed(x)
 
         for _ in range(self.n_layers):
             # h = block(h, mask)
-            h = self.attn(h)
+            h = self.attn(x)
             h = self.norm1(h + self.proj(h))
             h = self.norm2(h + self.pwff(h))
         return h
@@ -571,6 +571,39 @@ class BenchmarkTPNClassifier(nn.Module):
             if k in state_dict:
                 state_dict.update({k: v})
         self.load_state_dict(state_dict)
+    
+
+class LIMUBertMultiMAEModel4Pretrain(nn.Module):
+    def __init__(self, cfg, output_embed=False):
+        super().__init__()
+        self.embeddings = Embeddings(cfg)
+        self.transformer = Transformer(cfg) # encoder
+        self.fc = nn.Linear(cfg.hidden, cfg.hidden)
+        self.linear = nn.Linear(cfg.hidden, cfg.hidden)
+        self.activ = gelu
+        self.norm = LayerNorm(cfg)
+        self.decoder = nn.Linear(cfg.hidden, cfg.feature_num)
+        self.output_embed = output_embed
+    
+    def forward(self, gaze_seqs, head_seqs, masked_pos=None):
+        # Get Tokens from raw data
+        g_tokens = self.embeddings(gaze_seqs)
+        h_tokens = self.embeddings(head_seqs)
+        gh_tokens = torch.cat([g_tokens, h_tokens], dim=1) 
+
+        # Transformer forward pass
+        encoder_tokens = self.transformer(gh_tokens)
+
+        if masked_pos is not None:
+            masked_pos = masked_pos[:, :, None].expand(-1, -1, encoder_tokens.size(-1))
+            encoder_tokens = torch.gather(encoder_tokens, 1, masked_pos)
+        
+        encoder_tokens = self.activ(self.linear(encoder_tokens))
+        encoder_tokens = self.norm(encoder_tokens)
+        
+        # Decode tokens for each task using task-specific output decoders
+        gpreds = self.decoder(encoder_tokens)
+        return gpreds
 
 
 def fetch_classifier(method, model_cfg, input=None, output=None, feats=False):

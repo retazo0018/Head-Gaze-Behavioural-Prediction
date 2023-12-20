@@ -162,17 +162,23 @@ def partition_and_reshape(data, labels, label_index=0, training_rate=0.8, vali_r
     data_train = data[:train_num, ...]
     data_vali = data[train_num:train_num+vali_num, ...]
     data_test = data[train_num+vali_num:, ...]
-    t = np.min(labels[:, :, label_index])
-    label_train = labels[:train_num, ..., label_index] - t
-    label_vali = labels[train_num:train_num+vali_num, ..., label_index] - t
-    label_test = labels[train_num+vali_num:, ..., label_index] - t
+    label_train = labels[:train_num, ...]
+    label_vali = labels[train_num:train_num+vali_num, ...]
+    label_test = labels[train_num+vali_num:, ...]
+    # t = np.min(labels[:, :, label_index])
+    # label_train = labels[:train_num, ..., label_index] - t
+    # label_vali = labels[train_num:train_num+vali_num, ..., label_index] - t
+    # label_test = labels[train_num+vali_num:, ..., label_index] - t
     if change_shape:
         data_train = reshape_data(data_train, merge)
         data_vali = reshape_data(data_vali, merge)
         data_test = reshape_data(data_test, merge)
-        label_train = reshape_label(label_train, merge)
-        label_vali = reshape_label(label_vali, merge)
-        label_test = reshape_label(label_test, merge)
+        # label_train = reshape_label(label_train, merge)
+        # label_vali = reshape_label(label_vali, merge)
+        # label_test = reshape_label(label_test, merge)
+        label_train = reshape_data(label_train, merge)
+        label_vali = reshape_data(label_vali, merge)
+        label_test = reshape_data(label_test, merge)
     if change_shape and merge != 0:
         data_train, label_train = merge_dataset(data_train, label_train, mode=merge_mode)
         data_test, label_test = merge_dataset(data_test, label_test, mode=merge_mode)
@@ -298,7 +304,7 @@ class Preprocess4Mask:
             data[position1[i], position2[i]] = np.random.random(position2[i].size)
         return data
 
-    def __call__(self, instance):
+    def __call__(self, instance, ismask=True):
         shape = instance.shape
 
         # the number of prediction is sometimes less than max_pred when sequence is short
@@ -386,6 +392,28 @@ class LIBERTDataset4Pretrain(Dataset):
     def __len__(self):
         return len(self.data)
 
+
+class LIBERTMultiDataset4Pretrain(Dataset):
+    """ Load sentence pair (sequential or random order) from corpus """
+    def __init__(self, gaze, head, pipeline=[]):
+        super().__init__()
+        self.pipeline = pipeline
+        self.gaze = gaze
+        self.head = head
+
+    def __getitem__(self, index):
+        ginstance = self.gaze[index] # 1 Gaze sequence
+        hinstance = self.head[index] # 1 Head sequence
+        for proc in self.pipeline:
+            ginstance = proc(ginstance)
+            hinstance = proc(hinstance)
+        gmask_seq, gmasked_pos, gseq = ginstance
+        hmask_seq, hmasked_pos, hseq = hinstance
+        return torch.from_numpy(gmask_seq), torch.from_numpy(gmasked_pos).long(), torch.from_numpy(gseq), torch.from_numpy(hmask_seq), torch.from_numpy(hmasked_pos).long(), torch.from_numpy(hseq)
+
+    def __len__(self):
+        return len(self.gaze)
+    
 
 def handle_argv(target, config_train, prefix):
     parser = argparse.ArgumentParser(description='PyTorch LIMU-BERT Model')
