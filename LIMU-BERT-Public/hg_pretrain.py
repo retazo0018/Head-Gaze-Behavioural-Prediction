@@ -15,6 +15,7 @@ from config import MaskConfig, TrainConfig, PretrainModelConfig
 from models import LIMUBertModel4Pretrain, LIMUBertMultiMAEModel4Pretrain
 from utils import set_seeds, get_device, LIBERTMultiDataset4Pretrain, handle_argv, load_pretrain_data_config, prepare_classifier_dataset, \
     prepare_pretrain_dataset, Preprocess4Normalization,  Preprocess4Mask
+from visualize import Visualize
 
 
 def preprocess_one_csv(path, seq_len):
@@ -26,7 +27,7 @@ def preprocess_one_csv(path, seq_len):
     head = df["Unit_Vector"].values.tolist()
     if not len(gaze) < seq_len:
         gaze = np.array(gaze[:(len(gaze)//seq_len * seq_len)])
-        gaze = np.array(np.split(gaze, len(gaze)//seq_len))
+        gaze = np.array(np.split(gaze, len(gaze)//seq_len)) 
         head = np.array(head[:(len(head)//seq_len * seq_len)])
         head = np.array(np.split(head, len(head)//seq_len))
         return gaze, head
@@ -54,9 +55,9 @@ def preprocess_hgbd_dataset(args):
 
 
 def main(args, training_rate):
-    # preprocess_hgbd_dataset(args)
+    #preprocess_hgbd_dataset(args)
     gdata, hdata, train_cfg, model_cfg, mask_cfg, dataset_cfg = load_pretrain_data_config(args)
-    # pipeline = [Preprocess4Normalization(model_cfg.feature_num), Preprocess4Mask(mask_cfg)]
+    #pipeline = [Preprocess4Normalization(model_cfg.feature_num), Preprocess4Mask(mask_cfg)]
     pipeline = [Preprocess4Mask(mask_cfg)]
     gdata_train, hdata_train, gdata_test, hdata_test = prepare_pretrain_dataset(gdata, hdata, training_rate, seed=train_cfg.seed)
 
@@ -89,10 +90,20 @@ def main(args, training_rate):
         return gloss_lm.mean().cpu().numpy()
 
     if hasattr(args, 'pretrain_model'):
-        trainer.pretrain(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test
-                      , model_file=args.pretrain_model)
+        #We just evaluate the model here: changed to trainer.run
+        #Command: python hg_pretrain.py v3 hgbd 2 -s limu_v1 -g 0 -f "./saved/pretrain_base_hgbd_2/limu_v1"
+        preds, labels, eval_res = trainer.run(func_forward, func_evaluate, data_loader_train, model_file=args.pretrain_model) # On Training Data
+        preds_test, labels_test, eval_res_test = trainer.run(func_forward, func_evaluate, data_loader_test, model_file=args.pretrain_model) # On Test Data
     else:
-        trainer.pretrain(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, model_file=None)
+        preds, labels, eval_res = trainer.pretrain(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, model_file=None)
+
+    #Visualization: (Training)
+    vis = Visualize(preds,labels)
+    vis.plot3DLine()
+    #Visualization: (Test)
+    vis_test = Visualize(preds_test,labels_test)
+    vis_test.plot3DLine()
+
 
 
 if __name__ == "__main__":

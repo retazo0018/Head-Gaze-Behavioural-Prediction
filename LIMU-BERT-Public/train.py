@@ -96,9 +96,10 @@ class Trainer(object):
                 labels.append(label)
         # print("Eval execution time: %.5f seconds" % (time_sum / len(dt)))
         if func_evaluate:
-            return func_evaluate(torch.cat(labels, 0), torch.cat(results, 0))
+            #Return predictions:
+            return torch.cat(results, 0).cpu().numpy(), torch.cat(labels, 0).cpu().numpy(), func_evaluate(torch.cat(labels, 0), torch.cat(results, 0))
         else:
-            return torch.cat(results, 0).cpu().numpy()
+            return torch.cat(results, 0).cpu().numpy(), torch.cat(labels, 0).cpu().numpy()
 
     def train(self, func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, data_loader_vali
               , model_file=None, data_parallel=False, load_self=False):

@@ -1,0 +1,16 @@
+#Data Hyperparameters
+SEQLEN : [90,120,180,240]
+MASKRATIO: [0.2,0.3,0.4,0.6]
+#Model Hyperparameters
+NLAYERS: [4]
+NHIDDEN: [72]
+NHIDDENFF: [144]
+NHEAD: [4]
+FEATURENUM: [3]
+#Train Hyperparameters
+NUMEPOCHS: [15]
+LR: [0.001,0.0005,0.0001,0.01]
+BATCHSIZE: [64,96,128]
+TRAINTESTRATIO: [0.8,0.9]
+LOSS: ['MSE']
+OPTIMIZER: ['Adadelta', 'Adagrad', 'Adam', 'RMSprop', 'SGD']
