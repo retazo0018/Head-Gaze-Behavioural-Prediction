@@ -9,13 +9,14 @@ import torch.nn as nn
 import copy
 import os
 from torch.utils.data import Dataset, TensorDataset, DataLoader
-
-import models, train
+from datetime import datetime
+import models, train, tracking, plot
 from config import MaskConfig, TrainConfig, PretrainModelConfig
 from models import LIMUBertModel4Pretrain, LIMUBertMultiMAEModel4Pretrain
 from utils import set_seeds, get_device, LIBERTMultiDataset4Pretrain, handle_argv, load_pretrain_data_config, prepare_classifier_dataset, \
     prepare_pretrain_dataset, Preprocess4Normalization,  Preprocess4Mask
-from visualize import Visualize
+import mlflow
+from statistic import stat_results
 
 
 def preprocess_one_csv(path, seq_len):
@@ -54,9 +55,10 @@ def preprocess_hgbd_dataset(args):
     # np.save("../LIMU-BERT-Public/dataset/hgbd/label_2.npy", np.ones(gaze.shape))
 
 
-def main(args, training_rate):
+def main(args, training_rate, tracker):
     #preprocess_hgbd_dataset(args)
     gdata, hdata, train_cfg, model_cfg, mask_cfg, dataset_cfg = load_pretrain_data_config(args)
+    
     #pipeline = [Preprocess4Normalization(model_cfg.feature_num), Preprocess4Mask(mask_cfg)]
     pipeline = [Preprocess4Mask(mask_cfg)]
     gdata_train, hdata_train, gdata_test, hdata_test = prepare_pretrain_dataset(gdata, hdata, training_rate, seed=train_cfg.seed)
@@ -88,26 +90,35 @@ def main(args, training_rate):
     def func_evaluate(seqs, gpredict_seqs):
         gloss_lm = criterion(gpredict_seqs, seqs)
         return gloss_lm.mean().cpu().numpy()
-
+    
+    tracker.log_parameters(train_cfg, model_cfg, mask_cfg, dataset_cfg)
+    
     if hasattr(args, 'pretrain_model'):
-        #We just evaluate the model here: changed to trainer.run
-        #Command: python hg_pretrain.py v3 hgbd 2 -s limu_v1 -g 0 -f "./saved/pretrain_base_hgbd_2/limu_v1"
-        preds, labels, eval_res = trainer.run(func_forward, func_evaluate, data_loader_train, model_file=args.pretrain_model) # On Training Data
-        preds_test, labels_test, eval_res_test = trainer.run(func_forward, func_evaluate, data_loader_test, model_file=args.pretrain_model) # On Test Data
+        test_loss, train_loss = trainer.pretrain(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test
+                    , model_file=args.pretrain_model)
     else:
-        preds, labels, eval_res = trainer.pretrain(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, model_file=None)
+        test_loss, train_loss = trainer.pretrain(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, model_file=None)
 
-    #Visualization: (Training)
-    vis = Visualize(preds,labels)
-    vis.plot3DLine()
-    #Visualization: (Test)
-    vis_test = Visualize(preds_test,labels_test)
-    vis_test.plot3DLine()
+    tracker.log_metrics("Train Loss", train_loss)
+    tracker.log_metrics("Test Loss", test_loss)
+        
+    gaze_estimate_test = trainer.run(func_forward, None, data_loader_test)
 
+    return gdata_test, gaze_estimate_test
 
 
 if __name__ == "__main__":
     mode = "base"
     args = handle_argv('pretrain_' + mode, 'pretrain.json', mode)
     training_rate = 0.8
-    main(args, training_rate)
+
+    tracker = tracking.MLFlowTracker("Head and Gaze Prediction")
+    tracker.set_experiment()
+
+    with mlflow.start_run(description="A MultiModal Transformer"):
+        gdata_test, gaze_estimate_test = main(args, training_rate, tracker)
+        
+        datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
+        plot.plot3DLine(gaze_estimate_test, gdata_test, "3DLine_", datestr)
+        tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3DLine_{datestr}.png"))
+
