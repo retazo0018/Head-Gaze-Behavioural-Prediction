@@ -58,7 +58,7 @@ def preprocess_hgbd_dataset(args):
 def main(args, training_rate, tracker):
     #preprocess_hgbd_dataset(args)
     gdata, hdata, train_cfg, model_cfg, mask_cfg, dataset_cfg = load_pretrain_data_config(args)
-    
+
     #pipeline = [Preprocess4Normalization(model_cfg.feature_num), Preprocess4Mask(mask_cfg)]
     pipeline = [Preprocess4Mask(mask_cfg)]
     gdata_train, hdata_train, gdata_test, hdata_test = prepare_pretrain_dataset(gdata, hdata, training_rate, seed=train_cfg.seed)
@@ -99,6 +99,7 @@ def main(args, training_rate, tracker):
     else:
         test_loss, train_loss = trainer.pretrain(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, model_file=None)
 
+    tracker.log_model(model, "models")
     tracker.log_metrics("Train Loss", train_loss)
     tracker.log_metrics("Test Loss", test_loss)
         
@@ -121,4 +122,5 @@ if __name__ == "__main__":
         datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
         plot.plot3DLine(gaze_estimate_test, gdata_test, "3DLine_", datestr)
         tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3DLine_{datestr}.png"))
+        tracker.log_artifact(args.save_path+'.pt')
 

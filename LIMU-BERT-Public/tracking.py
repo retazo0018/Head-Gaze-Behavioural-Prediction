@@ -23,3 +23,7 @@ class MLFlowTracker:
     def log_artifact(self, path):
         mlflow.log_artifact(path)
 
+    
+    def log_model(self, model, name):
+        mlflow.pytorch.log_model(model, name)
+
