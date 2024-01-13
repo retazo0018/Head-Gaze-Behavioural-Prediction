@@ -393,6 +393,24 @@ class LIBERTDataset4Pretrain(Dataset):
         return len(self.data)
 
 
+class LIBERTGazeDataset4Pretrain(Dataset):
+    """ Load sentence pair (sequential or random order) from corpus """
+    def __init__(self, gaze, pipeline=[]):
+        super().__init__()
+        self.pipeline = pipeline
+        self.gaze = gaze
+
+    def __getitem__(self, index):
+        ginstance = self.gaze[index] # 1 Gaze sequence
+        for proc in self.pipeline:
+            ginstance = proc(ginstance)
+        gmask_seq, gmasked_pos, gseq = ginstance
+        return torch.from_numpy(gmask_seq), torch.from_numpy(gmasked_pos).long(), torch.from_numpy(gseq)
+
+    def __len__(self):
+        return len(self.gaze)
+
+
 class LIBERTMultiDataset4Pretrain(Dataset):
     """ Load sentence pair (sequential or random order) from corpus """
     def __init__(self, gaze, head, pipeline=[]):

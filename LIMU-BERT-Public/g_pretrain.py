@@ -12,8 +12,8 @@ from torch.utils.data import Dataset, TensorDataset, DataLoader
 from datetime import datetime
 import models, train, tracking, plot
 from config import MaskConfig, TrainConfig, PretrainModelConfig
-from models import LIMUBertModel4Pretrain, LIMUBertMultiMAEModel4Pretrain
-from utils import set_seeds, get_device, LIBERTMultiDataset4Pretrain, handle_argv, load_pretrain_data_config, prepare_classifier_dataset, \
+from models import LIMUBertModel4Pretrain, LIMUBertMultiMAEModel4Pretrain, LIMUBertAEModel4Pretrain
+from utils import set_seeds, get_device, LIBERTMultiDataset4Pretrain, LIBERTGazeDataset4Pretrain, handle_argv, load_pretrain_data_config, prepare_classifier_dataset, \
     prepare_pretrain_dataset, Preprocess4Normalization,  Preprocess4Mask
 import mlflow
 from statistic import stat_results
@@ -67,40 +67,31 @@ def main(args, training_rate, tracker):
                       mask_prob=mask_cfg.mask_prob, 
                       replace_prob=mask_cfg.replace_prob)
 
-    #pipeline = [Preprocess4Normalization(model_cfg.feature_num), Preprocess4Mask(mask_cfg)]
     pipeline = [Preprocess4Mask(mask_cfg)]
     gdata_train, hdata_train, gdata_test, hdata_test = prepare_pretrain_dataset(gdata, hdata, training_rate, seed=train_cfg.seed)
 
-    data_set_train = LIBERTMultiDataset4Pretrain(gdata_train, hdata_train, pipeline=pipeline)
-    data_set_test = LIBERTMultiDataset4Pretrain(gdata_test, hdata_test, pipeline=pipeline)
+    data_set_train = LIBERTGazeDataset4Pretrain(gdata_train, pipeline=pipeline)
+    data_set_test = LIBERTGazeDataset4Pretrain(gdata_test, pipeline=pipeline)
     
     data_loader_train = DataLoader(data_set_train, shuffle=True, batch_size=train_cfg.batch_size)
     data_loader_test = DataLoader(data_set_test, shuffle=False, batch_size=train_cfg.batch_size)
-
-    #Validate Masking: Mask Ratio: 0.4
-    # iter_ = iter(data_loader_train)
-    # batch = next(iter_)
-    # for i,data in enumerate(batch):
-    #     print(data)
-    #     print(data.shape)
-    #     break
     
-    model = LIMUBertMultiMAEModel4Pretrain(model_cfg)    
+    model = LIMUBertAEModel4Pretrain(model_cfg)    
     criterion = nn.MSELoss(reduction='none')
     optimizer = torch.optim.Adam(params=model.parameters(), lr=train_cfg.lr)
     device = get_device(args.gpu)
     trainer = train.Trainer(train_cfg, model, optimizer, args.save_path, device)
 
     def func_loss(model, batch):
-        gmask_seqs, gmasked_pos, gseqs, hmask_seqs, hmasked_pos, hseqs = batch
-        gseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
+        gmask_seqs, gmasked_pos, gseqs = batch
+        gseq_recon = model(gmask_seqs, gmasked_pos)
         gloss_lm = criterion(gseq_recon, gseqs) # for masked LM
         # import pdb; pdb.set_trace()
         return gloss_lm
 
     def func_forward(model, batch):
-        gmask_seqs, gmasked_pos, gseqs, hmask_seqs, hmasked_pos, hseqs = batch
-        gseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
+        gmask_seqs, gmasked_pos, gseqs = batch
+        gseq_recon = model(gmask_seqs, gmasked_pos)
         return gseq_recon, gseqs
 
     def func_evaluate(seqs, gpredict_seqs):
@@ -140,7 +131,7 @@ if __name__ == "__main__":
         args = handle_argv('pretrain_' + mode, 'pretrain.json', mode)
         args.D_SEQLEN = seq_len
         args.D_MASKRATIO = mask_ratio
-        with mlflow.start_run(description="A MultiModal Transformer"):
+        with mlflow.start_run(description="A Single Modal Transformer"):
             gdata_test, gaze_estimate_test = main(args, training_rate, tracker)
 
             datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")

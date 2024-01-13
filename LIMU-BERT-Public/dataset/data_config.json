@@ -63,6 +63,12 @@
         "seq_len": 240,
         "dimension": 3,
         "size": 62076
+    },
+    "gbd_2": {
+        "sr": 120,
+        "seq_len": 240,
+        "dimension": 3,
+        "size": 62076
     }
 }
 
