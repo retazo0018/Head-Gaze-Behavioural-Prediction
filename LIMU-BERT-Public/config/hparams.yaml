@@ -1,6 +1,6 @@
 # Data Hyperparameters
 D_SEQLEN : [240] #[90,120,180,240]
-D_MASKRATIO: [0.2,0.3,0.4,0.6]
+D_MASKRATIO: [0.4,0.6]
 
 # Model Hyperparameters
 M_NLAYERS: [4]

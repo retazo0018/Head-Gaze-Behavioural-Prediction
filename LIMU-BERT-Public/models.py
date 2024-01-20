@@ -35,6 +35,20 @@ class LayerNorm(nn.Module):
         return self.gamma * x + self.beta
         # return x
 
+# class LayerNormOut(nn.Module):
+#     "A layernorm module in the TF style (epsilon inside the square root)."
+#     def __init__(self, cfg, variance_epsilon=1e-12):
+#         super().__init__()
+#         self.gamma = nn.Parameter(torch.ones(cfg.feature_num), requires_grad=True)
+#         self.beta = nn.Parameter(torch.zeros(cfg.feature_num), requires_grad=True)
+#         self.variance_epsilon = variance_epsilon
+
+#     def forward(self, x):
+#         u = x.mean(-1, keepdim=True)
+#         s = (x - u).pow(2).mean(-1, keepdim=True)
+#         x = (x - u) / torch.sqrt(s + self.variance_epsilon)
+#         return self.gamma * x + self.beta
+
 
 class Embeddings(nn.Module):
 
@@ -574,7 +588,7 @@ class BenchmarkTPNClassifier(nn.Module):
     
 
 class LIMUBertMultiMAEModel4Pretrain(nn.Module):
-    def __init__(self, cfg, output_embed=False):
+    def __init__(self, cfg, recon_head=False, output_embed=False):
         super().__init__()
         self.embeddings = Embeddings(cfg)
         self.transformer = Transformer(cfg) # encoder
@@ -582,29 +596,16 @@ class LIMUBertMultiMAEModel4Pretrain(nn.Module):
         self.linear = nn.Linear(cfg.hidden, cfg.hidden)
         self.activ = gelu
         self.norm = LayerNorm(cfg)
-        self.decoder = nn.Linear(cfg.hidden, cfg.feature_num)
+        self.recon_head = recon_head
+        self.decoder_gaze = nn.Linear(cfg.hidden, cfg.feature_num)
+        self.decoder_head = nn.Linear(cfg.hidden, cfg.feature_num)
         self.output_embed = output_embed
+        #self.norm_out = LayerNormOut(cfg)
     
     def forward(self, gaze_seqs, head_seqs, masked_pos=None):
-        # Get Tokens from raw data
-        #Validate Tokens
-        # print(f'gaze_seqs: {gaze_seqs}, gaze_seqs.shape: {gaze_seqs.shape}')
-        # print(f'head_seqs: {head_seqs}, head_seqs.shape: {head_seqs.shape}')
-        # with open('./temp/gaze_seqs.txt', 'w') as file:
-        #     file.write(str(gaze_seqs[0]))
-        #     file.write(f'\\r\\n gaze_seqs.shape: {gaze_seqs[0].shape}')
-        # with open('./temp/head_seqs.txt', 'w') as file:
-        #     file.write(str(head_seqs[0]))
-        #     file.write(f'\\r\\n head_seqs.shape: {head_seqs[0].shape}')
         g_tokens = self.embeddings(gaze_seqs)
         h_tokens = self.embeddings(head_seqs)
-        #Validate Tokens
-        # print(f'g_tokens: {g_tokens}, g_tokens.shape: {g_tokens.shape}')
-        # print(f'h_tokens: {h_tokens}, h_tokens.shape: {h_tokens.shape}')
         gh_tokens = torch.cat([g_tokens, h_tokens], dim=1) 
-        #Validate concatenated tokens
-        # print(f'gh_tokens: {gh_tokens}, gh_tokens.shape: {gh_tokens.shape}')
-        # Transformer forward pass
         encoder_tokens = self.transformer(gh_tokens)
         if masked_pos is not None:
             masked_pos = masked_pos[:, :, None].expand(-1, -1, encoder_tokens.size(-1))
@@ -614,8 +615,15 @@ class LIMUBertMultiMAEModel4Pretrain(nn.Module):
         encoder_tokens = self.norm(encoder_tokens)
         
         # Decode tokens for each task using task-specific output decoders
-        gpreds = self.decoder(encoder_tokens)
-        return gpreds
+        g_preds = self.decoder_gaze(encoder_tokens)
+        g_norm = torch.norm(g_preds, p=2, dim=-1, keepdim=True) 
+        if not self.recon_head:
+            return g_preds / g_norm
+        else:
+            h_preds = self.decoder_head(encoder_tokens)
+            h_norm = torch.norm(h_preds, p=2, dim=-1, keepdim=True) 
+            return g_preds / g_norm, h_preds / h_norm
+            
 
 class LIMUBertAEModel4Pretrain(nn.Module):
     def __init__(self, cfg, output_embed=False):
@@ -643,8 +651,9 @@ class LIMUBertAEModel4Pretrain(nn.Module):
         encoder_tokens = self.norm(encoder_tokens)
         
         # Decode tokens for each task using task-specific output decoders
-        gpreds = self.decoder(encoder_tokens)
-        return gpreds
+        g_preds = self.decoder(encoder_tokens)
+        g_norm = torch.norm(g_preds, p=2, dim=-1, keepdim=True) 
+        return g_preds / g_norm
 
 def fetch_classifier(method, model_cfg, input=None, output=None, feats=False):
     if 'lstm' in method:

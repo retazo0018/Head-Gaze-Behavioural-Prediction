@@ -26,7 +26,7 @@ class Trainer(object):
         self.device = device # device name
 
     def pretrain(self, func_loss, func_forward, func_evaluate
-              , data_loader_train, data_loader_test, model_file=None, data_parallel=False):
+              , data_loader_train, data_loader_test, mlflow_tracker=None, model_file=None, data_parallel=False):
         """ Train Loop """
         self.load(model_file)
         model = self.model.to(self.device)
@@ -63,9 +63,14 @@ class Trainer(object):
                 # print(i)
 
             loss_eva = self.run(func_forward, func_evaluate, data_loader_test)
-            print('Epoch %d/%d : Average Loss %5.4f. Test Loss %5.4f'
+            print('Epoch %d/%d : Average Loss %5.4f. Validation Loss %5.4f'
                     % (e + 1, self.cfg.n_epochs, loss_sum / len(data_loader_train), loss_eva))
             # print("Train execution time: %.5f seconds" % (time_sum / len(self.data_loader)))
+        
+            mlflow_tracker.log_metrics("Train Loss", loss_sum / len(data_loader_train))
+            mlflow_tracker.log_metrics("Validation Loss", loss_eva)
+
+
             if loss_eva < best_loss:
                 best_loss = loss_eva
                 model_best = copy.deepcopy(model.state_dict())
@@ -75,7 +80,7 @@ class Trainer(object):
         # self.save(global_step)
         return loss_eva, (loss_sum/len(data_loader_train))
 
-    def run(self, func_forward, func_evaluate, data_loader, model_file=None, data_parallel=False, load_self=False):
+    def run(self, func_forward, func_evaluate, data_loader, model_type='gaze', mlflow_tracker=None, model_file=None, data_parallel=False, load_self=False):
         """ Evaluation Loop """
         self.model.eval() # evaluation mode
         self.load(model_file, load_self=load_self)
@@ -97,8 +102,17 @@ class Trainer(object):
                 labels.append(label)
         # print("Eval execution time: %.5f seconds" % (time_sum / len(dt)))
         if func_evaluate:
-            return func_evaluate(torch.cat(labels, 0), torch.cat(results, 0))
+            test_loss = func_evaluate(torch.cat(labels, 0), torch.cat(results, 0))
+            return test_loss
         else:
+            if mlflow_tracker != None:
+                mlflow_tracker.log_metrics("Test Loss", test_loss)
+            if model_type == 'head_gaze_mm':
+                for i in range(len(results)):
+                    seq_len = results[i].shape[1]
+                    gaze_seq_len = seq_len // 2
+                    results[i] = results[i][:, :gaze_seq_len, :]
+                return torch.cat(results, 0).cpu().numpy()
             return torch.cat(results, 0).cpu().numpy()
         
     def train(self, func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, data_loader_vali

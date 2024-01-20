@@ -130,7 +130,7 @@ def prepare_pretrain_dataset(data, labels, training_rate, seed=None):
     data_train, label_train, data_vali, label_vali, data_test, label_test = partition_and_reshape(data, labels, label_index=0
                                                                                                   , training_rate=training_rate, vali_rate=0.1
                                                                                                   , change_shape=False)
-    return data_train, label_train, data_vali, label_vali
+    return data_train, label_train, data_vali, label_vali, data_test, label_test
 
 
 def prepare_classifier_dataset(data, labels, label_index=0, training_rate=0.8, label_rate=1.0, change_shape=True
@@ -447,6 +447,7 @@ def handle_argv(target, config_train, prefix):
                         help='Label Index')
     parser.add_argument('-s', '--save_model', type=str, default='model',
                         help='The saved model name')
+    parser.add_argument('-mt','--model_type',type=str,default='head_gaze_mm', choices=['gaze','gaze_mm','head_gaze_mm'])
     try:
         args = parser.parse_args()
     except:
