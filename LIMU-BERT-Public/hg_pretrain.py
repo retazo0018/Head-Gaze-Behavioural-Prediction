@@ -16,16 +16,16 @@ from models import LIMUBertModel4Pretrain, LIMUBertMultiMAEModel4Pretrain
 from utils import set_seeds, get_device, LIBERTMultiDataset4Pretrain, handle_argv, load_pretrain_data_config, prepare_classifier_dataset, \
     prepare_pretrain_dataset, Preprocess4Normalization,  Preprocess4Mask
 import mlflow
-from statistic import stat_results
+from statistic import compute_dtw_metric, compute_levenschtein_distance
 
 
-def preprocess_one_csv(path, seq_len):
+def preprocess_one_csv(path, seq_len, downsample_ratio):
     df = pd.read_csv(path)
     df = df.dropna()
     df['RightGazeDirection'] = df['RightGazeDirection'].apply(lambda x: ast.literal_eval(x))
     df['Unit_Vector'] = df['Unit_Vector'].apply(lambda x: ast.literal_eval(x))
-    gaze = df["RightGazeDirection"].values.tolist()
-    head = df["Unit_Vector"].values.tolist()
+    gaze = df["RightGazeDirection"][::downsample_ratio].values.tolist()
+    head = df["Unit_Vector"][::downsample_ratio].values.tolist()
     if not len(gaze) < seq_len:
         gaze = np.array(gaze[:(len(gaze)//seq_len * seq_len)])
         gaze = np.array(np.split(gaze, len(gaze)//seq_len)) 
@@ -43,7 +43,7 @@ def preprocess_hgbd_dataset(args):
         try:
             csvs = os.listdir("../Data/Version2/" + per)
             for f in range(len(csvs)):
-                temp1, temp2 = preprocess_one_csv("../Data/Version2/" + per + "/" + csvs[f], dataset_cfg.seq_len)
+                temp1, temp2 = preprocess_one_csv("../Data/Version2/" + per + "/" + csvs[f], dataset_cfg.seq_len, dataset_cfg.downsample_ratio)
                 if temp1 is not None and temp2 is not None:
                     gaze = np.concatenate((gaze, temp1), axis=0)
                     head = np.concatenate((head, temp2), axis=0)
@@ -56,17 +56,19 @@ def preprocess_hgbd_dataset(args):
 
 
 def main(args, training_rate, tracker):
-    #preprocess_hgbd_dataset(args)
+    # preprocess_hgbd_dataset(args)
     gdata, hdata, train_cfg, model_cfg, mask_cfg, dataset_cfg = load_pretrain_data_config(args)
 
     #pipeline = [Preprocess4Normalization(model_cfg.feature_num), Preprocess4Mask(mask_cfg)]
     pipeline = [Preprocess4Mask(mask_cfg)]
-    gdata_train, hdata_train, gdata_test, hdata_test = prepare_pretrain_dataset(gdata, hdata, training_rate, seed=train_cfg.seed)
+    gdata_train, hdata_train, gdata_val, hdata_val, gdata_test, hdata_test = prepare_pretrain_dataset(gdata, hdata, training_rate, seed=train_cfg.seed)
 
     data_set_train = LIBERTMultiDataset4Pretrain(gdata_train, hdata_train, pipeline=pipeline)
+    data_set_val = LIBERTMultiDataset4Pretrain(gdata_val, hdata_val, pipeline=pipeline)
     data_set_test = LIBERTMultiDataset4Pretrain(gdata_test, hdata_test, pipeline=pipeline)
     
     data_loader_train = DataLoader(data_set_train, shuffle=True, batch_size=train_cfg.batch_size)
+    data_loader_val = DataLoader(data_set_val, shuffle=True, batch_size=train_cfg.batch_size)
     data_loader_test = DataLoader(data_set_test, shuffle=False, batch_size=train_cfg.batch_size)
     
     model = LIMUBertMultiMAEModel4Pretrain(model_cfg)    
@@ -94,18 +96,19 @@ def main(args, training_rate, tracker):
     tracker.log_parameters(train_cfg, model_cfg, mask_cfg, dataset_cfg)
     
     if hasattr(args, 'pretrain_model'):
-        test_loss, train_loss = trainer.pretrain(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test
+        val_loss, test_loss, train_loss = trainer.pretrain(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_val, data_loader_test
                     , model_file=args.pretrain_model)
     else:
-        test_loss, train_loss = trainer.pretrain(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, model_file=None)
+        val_loss, test_loss, train_loss = trainer.pretrain(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_val, data_loader_test, model_file=None)
 
     tracker.log_model(model, "models")
     tracker.log_metrics("Train Loss", train_loss)
+    tracker.log_metrics("Val Loss", val_loss)
     tracker.log_metrics("Test Loss", test_loss)
         
-    gaze_estimate_test = trainer.run(func_forward, None, data_loader_test)
+    gaze_estimate_test, gaze_actual_test = trainer.run(func_forward, None, data_loader_test, return_labels=True)
 
-    return gdata_test, gaze_estimate_test
+    return gaze_actual_test, gaze_estimate_test
 
 
 if __name__ == "__main__":
@@ -113,14 +116,16 @@ if __name__ == "__main__":
     args = handle_argv('pretrain_' + mode, 'pretrain.json', mode)
     training_rate = 0.8
 
-    tracker = tracking.MLFlowTracker("Head and Gaze Prediction")
+    tracker = tracking.MLFlowTracker("Head and Gaze Prediction ||")
     tracker.set_experiment()
 
     with mlflow.start_run(description="A MultiModal Transformer"):
-        gdata_test, gaze_estimate_test = main(args, training_rate, tracker)
-        
+        gaze_actual_test, gaze_estimate_test = main(args, training_rate, tracker)
+        # tracker.log_metrics("Test Levenschtein Distance", compute_levenschtein_distance(gaze_estimate_test, gaze_actual_test))
+        tracker.log_metrics("Test Dynamic Time Warping", compute_dtw_metric(gaze_estimate_test, gaze_actual_test))
+
         datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
-        plot.plot3DLine(gaze_estimate_test, gdata_test, "3DLine_", datestr)
+        plot.plot3DLine(gaze_estimate_test, gaze_actual_test, "3DLine_", datestr)
         tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3DLine_{datestr}.png"))
         tracker.log_artifact(args.save_path+'.pt')
 

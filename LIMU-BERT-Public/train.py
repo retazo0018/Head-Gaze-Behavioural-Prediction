@@ -26,7 +26,7 @@ class Trainer(object):
         self.device = device # device name
 
     def pretrain(self, func_loss, func_forward, func_evaluate
-              , data_loader_train, data_loader_test, model_file=None, data_parallel=False):
+              , data_loader_train, data_loader_val, data_loader_test, model_file=None, data_parallel=False):
         """ Train Loop """
         self.load(model_file)
         model = self.model.to(self.device)
@@ -62,8 +62,8 @@ class Trainer(object):
                     return
                 # print(i)
 
-            loss_eva = self.run(func_forward, func_evaluate, data_loader_test)
-            print('Epoch %d/%d : Average Loss %5.4f. Test Loss %5.4f'
+            loss_eva = self.run(func_forward, func_evaluate, data_loader_val)
+            print('Epoch %d/%d : Average Loss %5.4f. Val Loss %5.4f'
                     % (e + 1, self.cfg.n_epochs, loss_sum / len(data_loader_train), loss_eva))
             # print("Train execution time: %.5f seconds" % (time_sum / len(self.data_loader)))
             if loss_eva < best_loss:
@@ -72,10 +72,11 @@ class Trainer(object):
                 self.save(0)
         model.load_state_dict(model_best)
         print('The Total Epoch have been reached.')
+        loss_test = self.run(func_forward, func_evaluate, data_loader_test)
         # self.save(global_step)
-        return loss_eva, (loss_sum/len(data_loader_train))
+        return loss_eva, loss_test, (loss_sum/len(data_loader_train))
 
-    def run(self, func_forward, func_evaluate, data_loader, model_file=None, data_parallel=False, load_self=False):
+    def run(self, func_forward, func_evaluate, data_loader, model_file=None, data_parallel=False, load_self=False, return_labels=False):
         """ Evaluation Loop """
         self.model.eval() # evaluation mode
         self.load(model_file, load_self=load_self)
@@ -98,6 +99,8 @@ class Trainer(object):
         # print("Eval execution time: %.5f seconds" % (time_sum / len(dt)))
         if func_evaluate:
             return func_evaluate(torch.cat(labels, 0), torch.cat(results, 0))
+        elif return_labels:
+            return torch.cat(results, 0).cpu().numpy(), torch.cat(labels, 0).cpu().numpy()
         else:
             return torch.cat(results, 0).cpu().numpy()
         

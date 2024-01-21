@@ -8,7 +8,8 @@
 import numpy as np
 from sklearn import metrics
 from sklearn.metrics import f1_score
-
+from fastdtw import fastdtw
+import Levenshtein
 from plot import plot_matrix
 
 
@@ -57,3 +58,14 @@ def stat_acc_f1_tpn(label, label_estimated, task_num=5, threshold=0.5):
     f1 = f1_score(label_new, label_estimated_new, average='macro')
     acc = np.sum(label_new == label_estimated_new) / label_new.size
     return acc, f1
+
+
+def compute_dtw_metric(label, results_estimated):
+    distance, path = fastdtw(label, results_estimated)
+    return distance
+
+
+def compute_levenschtein_distance(label, results_estimated):
+    lev_distance = Levenshtein.distance(label, results_estimated)
+    return lev_distance
+
