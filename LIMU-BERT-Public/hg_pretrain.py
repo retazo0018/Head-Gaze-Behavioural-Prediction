@@ -61,7 +61,7 @@ def main(args, training_rate, tracker):
     # preprocess_hgbd_dataset(args)
     gdata, hdata, train_cfg, model_cfg, mask_cfg, dataset_cfg = load_pretrain_data_config(args)
     #Setting mask_cfg from hyperparameters:
-    mask_cfg = MaskConfig(mask_ratio=args.D_MASKRATIO, 
+    mask_cfg = MaskConfig(mask_ratio=mask_cfg.mask_ratio, 
                       mask_alpha=mask_cfg.mask_alpha, 
                       max_gram=mask_cfg.max_gram, 
                       mask_prob=mask_cfg.mask_prob, 
@@ -71,21 +71,18 @@ def main(args, training_rate, tracker):
     pipeline = [Preprocess4Mask(mask_cfg)]
     gdata_train, hdata_train, gdata_val, hdata_val, gdata_test, hdata_test = prepare_pretrain_dataset(gdata, hdata, training_rate, seed=train_cfg.seed)
 
-    model = None
     if args.model_type == 'gaze':
         dataset_pretrain = LIBERTGazeDataset4Pretrain
         model = LIMUBertAEModel4Pretrain(model_cfg)
         data_set_train = dataset_pretrain(gdata_train, pipeline=pipeline)
         data_set_val = dataset_pretrain(gdata_val, pipeline=pipeline)
         data_set_test = dataset_pretrain(gdata_test, pipeline=pipeline)
-    elif args.model_type == 'gaze_mm':
+    else:
         dataset_pretrain = LIBERTMultiDataset4Pretrain
-        model = LIMUBertMultiMAEModel4Pretrain(model_cfg,recon_head=False)
-    elif args.model_type == 'head_gaze_mm':
-        dataset_pretrain = LIBERTMultiDataset4Pretrain
-        model = LIMUBertMultiMAEModel4Pretrain(model_cfg,recon_head=True)
-
-    if args.model_type != 'gaze':
+        if args.model_type == 'gaze_mm':
+            model = LIMUBertMultiMAEModel4Pretrain(model_cfg,recon_head=False)
+        elif args.model_type == 'head_gaze_mm':
+            model = LIMUBertMultiMAEModel4Pretrain(model_cfg,recon_head=True)
         data_set_train = dataset_pretrain(gdata_train, hdata_train, pipeline=pipeline)
         data_set_val = dataset_pretrain(gdata_val, hdata_val, pipeline=pipeline)
         data_set_test = dataset_pretrain(gdata_test, hdata_test, pipeline=pipeline)
@@ -99,29 +96,24 @@ def main(args, training_rate, tracker):
     device = get_device(args.gpu)
     trainer = train.Trainer(train_cfg, model, optimizer, args.save_path, device)
 
-
     def func_loss(model, batch):
         if args.model_type == 'gaze':
-            gmask_seqs, gmasked_pos, gseqs = batch
-        else:    
-            gmask_seqs, gmasked_pos, gseqs, hmask_seqs, hmasked_pos, hseqs = batch
-        
-        if args.model_type == 'gaze_mm':
-            gseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
-            gloss_lm = criterion(gseq_recon, gseqs)
-            loss_lm = gloss_lm
-        elif args.model_type == 'head_gaze_mm':
-            gseq_recon, hseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
-            gloss_lm = criterion(gseq_recon, gseqs)
-            hloss_lm = criterion(hseq_recon, hseqs)
-            #loss_lm = gloss_lm + hloss_lm
-            loss_lm = torch.concat((gloss_lm,hloss_lm), dim = 1)
-            #import pdb; pdb.set_trace()
-        else:
             gmask_seqs, gmasked_pos, gseqs = batch
             gseq_recon = model(gmask_seqs, gmasked_pos)
             gloss_lm = criterion(gseq_recon, gseqs) 
             loss_lm = gloss_lm
+        else:    
+            gmask_seqs, gmasked_pos, gseqs, hmask_seqs, hmasked_pos, hseqs = batch
+            if args.model_type == 'gaze_mm':
+                gseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
+                gloss_lm = criterion(gseq_recon, gseqs)
+                loss_lm = gloss_lm
+            elif args.model_type == 'head_gaze_mm':
+                gseq_recon, hseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
+                gloss_lm = criterion(gseq_recon, gseqs)
+                hloss_lm = criterion(hseq_recon, hseqs)
+                #loss_lm = torch.concat((gloss_lm,hloss_lm), dim = 1)
+                loss_lm = gloss_lm + hloss_lm
         return loss_lm
 
     def func_forward(model, batch):
@@ -132,22 +124,21 @@ def main(args, training_rate, tracker):
         elif args.model_type == 'head_gaze_mm':
             gmask_seqs, gmasked_pos, gseqs, hmask_seqs, hmasked_pos, hseqs = batch
             gseq_recon, hseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
-            #import pdb; pdb.set_trace();
             return torch.concat((gseq_recon,hseq_recon), dim = 1), torch.concat((gseqs,hseqs), dim = 1)
         else:
             gmask_seqs, gmasked_pos, gseqs = batch
             gseq_recon = model(gmask_seqs, gmasked_pos)
             return gseq_recon, gseqs
         
-    def func_evaluate(seqs, gpredict_seqs):
+    def func_evaluate(seqs, predict_seqs):
         if args.model_type == 'gaze_mm':
-            gloss_lm = criterion(gpredict_seqs, seqs)
+            gloss_lm = criterion(predict_seqs, seqs)
             return gloss_lm.mean().cpu().numpy()
         elif args.model_type == 'head_gaze_mm':
-            gloss_lm = criterion(gpredict_seqs, seqs)
-            return gloss_lm.mean().cpu().numpy()
+            hgloss_lm = criterion(predict_seqs, seqs)
+            return hgloss_lm.mean().cpu().numpy()
         else:
-            gloss_lm = criterion(gpredict_seqs, seqs)
+            gloss_lm = criterion(predict_seqs, seqs)
             return gloss_lm.mean().cpu().numpy()
 
     tracker.log_parameters(train_cfg, model_cfg, mask_cfg, dataset_cfg)
@@ -163,24 +154,26 @@ def main(args, training_rate, tracker):
     tracker.log_metrics("Val Loss", val_loss)
     tracker.log_metrics("Test Loss", test_loss)
         
-    gaze_estimate_test, gaze_actual_test = trainer.run(func_forward, None, data_loader_test, return_labels=True)
+    estimate_test, actual_test = trainer.run(func_forward, None, data_loader_test, return_labels=True)
 
-    return gaze_actual_test, gaze_estimate_test
+    return actual_test, estimate_test
+
 
 if __name__ == "__main__":
     mode = "base"
+    args = handle_argv('pretrain_' + mode, 'pretrain.json', mode)
     training_rate = 0.8
-
-    tracker = tracking.MLFlowTracker("Head and Gaze Prediction ||")
+    
+    tracker = tracking.MLFlowTracker("Temp")
     tracker.set_experiment()
 
     with mlflow.start_run(description="A MultiModal Transformer"):
-        gaze_actual_test, gaze_estimate_test = main(args, training_rate, tracker)
+        actual_test, estimate_test = main(args, training_rate, tracker)
         # tracker.log_metrics("Test Levenschtein Distance", compute_levenschtein_distance(gaze_estimate_test, gaze_actual_test))
-        tracker.log_metrics("Test Dynamic Time Warping", compute_dtw_metric(gaze_estimate_test, gaze_actual_test))
+        tracker.log_metrics("Test Dynamic Time Warping", compute_dtw_metric(estimate_test, actual_test))
 
         datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
-        plot.plot3DLine(gaze_estimate_test, gaze_actual_test, "3DLine_", datestr)
+        plot.plot3DLine(estimate_test, actual_test, "3DLine_", datestr)
         tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3DLine_{datestr}.png"))
         tracker.log_artifact(args.save_path+'.pt')
 

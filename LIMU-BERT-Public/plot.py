@@ -135,7 +135,7 @@ def plot3DLine(preds, labels, fname, datestr, n=200):
     # Output Vectors
     ax1 = fig.add_subplot(1, 2, 1, projection='3d')
     for sequence in preds_3d:
-        ax1.plot(sequence[:, 0], sequence[:, 1], sequence[:, 2])
+        ax1.scatter(sequence[:, 0], sequence[:, 1], sequence[:, 2])
     ax1.set_title('Generated Data')
     ax1.set_xlabel('X')
     ax1.set_ylabel('Y')
@@ -144,7 +144,7 @@ def plot3DLine(preds, labels, fname, datestr, n=200):
     # Training/Test Vectors
     ax2 = fig.add_subplot(1, 2, 2, projection='3d')
     for sequence in labels_3d:
-        ax2.plot(sequence[:, 0], sequence[:, 1], sequence[:, 2])
+        ax2.scatter(sequence[:, 0], sequence[:, 1], sequence[:, 2])
     ax2.set_title('Actual Data')
     ax2.set_xlabel('X')
     ax2.set_ylabel('Y')
