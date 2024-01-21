@@ -105,7 +105,8 @@ class Trainer(object):
             test_loss = func_evaluate(torch.cat(labels, 0), torch.cat(results, 0))
             return test_loss
         else:
-            if mlflow_tracker != None:
+            if mlflow_tracker and func_evaluate:
+                test_loss = func_evaluate(torch.cat(labels, 0), torch.cat(results, 0))
                 mlflow_tracker.log_metrics("Test Loss", test_loss)
             if model_type == 'head_gaze_mm':
                 for i in range(len(results)):
@@ -113,6 +114,7 @@ class Trainer(object):
                     gaze_seq_len = seq_len // 2
                     results[i] = results[i][:, :gaze_seq_len, :]
                 return torch.cat(results, 0).cpu().numpy()
+
             return torch.cat(results, 0).cpu().numpy()
         
     def train(self, func_loss, func_forward, func_evaluate, data_loader_train, data_loader_test, data_loader_vali

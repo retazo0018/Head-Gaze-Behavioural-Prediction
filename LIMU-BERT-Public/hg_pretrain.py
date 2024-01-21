@@ -12,8 +12,8 @@ from torch.utils.data import Dataset, TensorDataset, DataLoader
 from datetime import datetime
 import models, train, tracking, plot
 from config import MaskConfig, TrainConfig, PretrainModelConfig
-from models import LIMUBertModel4Pretrain, LIMUBertMultiMAEModel4Pretrain
-from utils import set_seeds, get_device, LIBERTMultiDataset4Pretrain, handle_argv, load_pretrain_data_config, prepare_classifier_dataset, \
+from models import LIMUBertModel4Pretrain, LIMUBertMultiMAEModel4Pretrain, LIMUBertAEModel4Pretrain
+from utils import set_seeds, get_device, LIBERTMultiDataset4Pretrain,LIBERTGazeDataset4Pretrain, handle_argv, load_pretrain_data_config, prepare_classifier_dataset, \
     prepare_pretrain_dataset, Preprocess4Normalization,  Preprocess4Mask
 import mlflow
 from statistic import stat_results
@@ -75,6 +75,9 @@ def main(args, training_rate, tracker):
     if args.model_type == 'gaze':
         dataset_pretrain = LIBERTGazeDataset4Pretrain
         model = LIMUBertAEModel4Pretrain(model_cfg)
+        data_set_train = dataset_pretrain(gdata_train, pipeline=pipeline)
+        data_set_val = dataset_pretrain(gdata_val, pipeline=pipeline)
+        data_set_test = dataset_pretrain(gdata_test, pipeline=pipeline)
     elif args.model_type == 'gaze_mm':
         dataset_pretrain = LIBERTMultiDataset4Pretrain
         model = LIMUBertMultiMAEModel4Pretrain(model_cfg,recon_head=False)
@@ -82,10 +85,11 @@ def main(args, training_rate, tracker):
         dataset_pretrain = LIBERTMultiDataset4Pretrain
         model = LIMUBertMultiMAEModel4Pretrain(model_cfg,recon_head=True)
 
-    data_set_train = dataset_pretrain(gdata_train, hdata_train, pipeline=pipeline)
-    data_set_val = dataset_pretrain(gdata_val, hdata_val, pipeline=pipeline)
-    data_set_test = dataset_pretrain(gdata_test, hdata_test, pipeline=pipeline)
-    
+    if args.model_type != 'gaze':
+        data_set_train = dataset_pretrain(gdata_train, hdata_train, pipeline=pipeline)
+        data_set_val = dataset_pretrain(gdata_val, hdata_val, pipeline=pipeline)
+        data_set_test = dataset_pretrain(gdata_test, hdata_test, pipeline=pipeline)
+        
     data_loader_train = DataLoader(data_set_train, shuffle=True, batch_size=train_cfg.batch_size)
     data_loader_val = DataLoader(data_set_val, shuffle=True, batch_size=train_cfg.batch_size)
     data_loader_test = DataLoader(data_set_test, shuffle=False, batch_size=train_cfg.batch_size)
@@ -108,7 +112,7 @@ def main(args, training_rate, tracker):
             loss_lm = gloss_lm
         elif args.model_type == 'head_gaze_mm':
             gseq_recon, hseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
-            gloss_lm = criterion(gseq_recon, gseqs) # for masked LM
+            gloss_lm = criterion(gseq_recon, gseqs)
             hloss_lm = criterion(hseq_recon, hseqs)
             #loss_lm = gloss_lm + hloss_lm
             loss_lm = torch.concat((gloss_lm,hloss_lm), dim = 1)
