@@ -76,7 +76,7 @@ class Trainer(object):
         # self.save(global_step)
         return loss_eva, loss_test, (loss_sum/len(data_loader_train))
 
-    def run(self, func_forward, func_evaluate, data_loader, model_file=None, data_parallel=False, load_self=False, return_labels=False):
+    def run(self, func_forward, func_evaluate, data_loader, model_type='gaze', mlflow_tracker=None, model_file=None, data_parallel=False, load_self=False, return_labels=False):
         """ Evaluation Loop """
         self.model.eval() # evaluation mode
         self.load(model_file, load_self=load_self)

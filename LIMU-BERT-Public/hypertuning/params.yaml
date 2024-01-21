@@ -1,15 +1,13 @@
-# Data Hyperparameters
-D_SEQLEN : [240] #[90,120,180,240]
-D_MASKRATIO: [0.4,0.6]
-
-# Model Hyperparameters
+#Data Hyperparameters
+D_SEQLEN : [90,120,180,240]
+D_MASKRATIO: [0.2,0.3,0.4,0.6]
+#Model Hyperparameters
 M_NLAYERS: [4]
 M_NHIDDEN: [72]
 M_NHIDDENFF: [144]
 M_NHEAD: [4]
 M_FEATURENUM: [3]
-
-# Train Hyperparameters
+#Train Hyperparameters
 T_NUMEPOCHS: [15]
 T_LR: [0.001,0.0005,0.0001,0.01]
 T_BATCHSIZE: [64,96,128]

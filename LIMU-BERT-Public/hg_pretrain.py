@@ -12,11 +12,13 @@ from torch.utils.data import Dataset, TensorDataset, DataLoader
 from datetime import datetime
 import models, train, tracking, plot
 from config import MaskConfig, TrainConfig, PretrainModelConfig
-from models import LIMUBertModel4Pretrain, LIMUBertMultiMAEModel4Pretrain
-from utils import set_seeds, get_device, LIBERTMultiDataset4Pretrain, handle_argv, load_pretrain_data_config, prepare_classifier_dataset, \
+from models import LIMUBertModel4Pretrain, LIMUBertMultiMAEModel4Pretrain, LIMUBertAEModel4Pretrain
+from utils import set_seeds, get_device, LIBERTMultiDataset4Pretrain,LIBERTGazeDataset4Pretrain, handle_argv, load_pretrain_data_config, prepare_classifier_dataset, \
     prepare_pretrain_dataset, Preprocess4Normalization,  Preprocess4Mask
 import mlflow
 from statistic import compute_dtw_metric, compute_levenschtein_distance
+from hyperparameter_opt import HyperparameterOptimization
+import itertools
 
 
 def preprocess_one_csv(path, seq_len, downsample_ratio):
@@ -58,41 +60,96 @@ def preprocess_hgbd_dataset(args):
 def main(args, training_rate, tracker):
     # preprocess_hgbd_dataset(args)
     gdata, hdata, train_cfg, model_cfg, mask_cfg, dataset_cfg = load_pretrain_data_config(args)
+    #Setting mask_cfg from hyperparameters:
+    mask_cfg = MaskConfig(mask_ratio=args.D_MASKRATIO, 
+                      mask_alpha=mask_cfg.mask_alpha, 
+                      max_gram=mask_cfg.max_gram, 
+                      mask_prob=mask_cfg.mask_prob, 
+                      replace_prob=mask_cfg.replace_prob)
 
     #pipeline = [Preprocess4Normalization(model_cfg.feature_num), Preprocess4Mask(mask_cfg)]
     pipeline = [Preprocess4Mask(mask_cfg)]
     gdata_train, hdata_train, gdata_val, hdata_val, gdata_test, hdata_test = prepare_pretrain_dataset(gdata, hdata, training_rate, seed=train_cfg.seed)
 
-    data_set_train = LIBERTMultiDataset4Pretrain(gdata_train, hdata_train, pipeline=pipeline)
-    data_set_val = LIBERTMultiDataset4Pretrain(gdata_val, hdata_val, pipeline=pipeline)
-    data_set_test = LIBERTMultiDataset4Pretrain(gdata_test, hdata_test, pipeline=pipeline)
-    
+    model = None
+    if args.model_type == 'gaze':
+        dataset_pretrain = LIBERTGazeDataset4Pretrain
+        model = LIMUBertAEModel4Pretrain(model_cfg)
+        data_set_train = dataset_pretrain(gdata_train, pipeline=pipeline)
+        data_set_val = dataset_pretrain(gdata_val, pipeline=pipeline)
+        data_set_test = dataset_pretrain(gdata_test, pipeline=pipeline)
+    elif args.model_type == 'gaze_mm':
+        dataset_pretrain = LIBERTMultiDataset4Pretrain
+        model = LIMUBertMultiMAEModel4Pretrain(model_cfg,recon_head=False)
+    elif args.model_type == 'head_gaze_mm':
+        dataset_pretrain = LIBERTMultiDataset4Pretrain
+        model = LIMUBertMultiMAEModel4Pretrain(model_cfg,recon_head=True)
+
+    if args.model_type != 'gaze':
+        data_set_train = dataset_pretrain(gdata_train, hdata_train, pipeline=pipeline)
+        data_set_val = dataset_pretrain(gdata_val, hdata_val, pipeline=pipeline)
+        data_set_test = dataset_pretrain(gdata_test, hdata_test, pipeline=pipeline)
+        
     data_loader_train = DataLoader(data_set_train, shuffle=True, batch_size=train_cfg.batch_size)
     data_loader_val = DataLoader(data_set_val, shuffle=True, batch_size=train_cfg.batch_size)
     data_loader_test = DataLoader(data_set_test, shuffle=False, batch_size=train_cfg.batch_size)
     
-    model = LIMUBertMultiMAEModel4Pretrain(model_cfg)    
     criterion = nn.MSELoss(reduction='none')
     optimizer = torch.optim.Adam(params=model.parameters(), lr=train_cfg.lr)
     device = get_device(args.gpu)
     trainer = train.Trainer(train_cfg, model, optimizer, args.save_path, device)
 
+
     def func_loss(model, batch):
-        gmask_seqs, gmasked_pos, gseqs, hmask_seqs, hmasked_pos, hseqs = batch
-        gseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
-        gloss_lm = criterion(gseq_recon, gseqs) # for masked LM
-        # import pdb; pdb.set_trace()
-        return gloss_lm
+        if args.model_type == 'gaze':
+            gmask_seqs, gmasked_pos, gseqs = batch
+        else:    
+            gmask_seqs, gmasked_pos, gseqs, hmask_seqs, hmasked_pos, hseqs = batch
+        
+        if args.model_type == 'gaze_mm':
+            gseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
+            gloss_lm = criterion(gseq_recon, gseqs)
+            loss_lm = gloss_lm
+        elif args.model_type == 'head_gaze_mm':
+            gseq_recon, hseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
+            gloss_lm = criterion(gseq_recon, gseqs)
+            hloss_lm = criterion(hseq_recon, hseqs)
+            #loss_lm = gloss_lm + hloss_lm
+            loss_lm = torch.concat((gloss_lm,hloss_lm), dim = 1)
+            #import pdb; pdb.set_trace()
+        else:
+            gmask_seqs, gmasked_pos, gseqs = batch
+            gseq_recon = model(gmask_seqs, gmasked_pos)
+            gloss_lm = criterion(gseq_recon, gseqs) 
+            loss_lm = gloss_lm
+        return loss_lm
 
     def func_forward(model, batch):
-        gmask_seqs, gmasked_pos, gseqs, hmask_seqs, hmasked_pos, hseqs = batch
-        gseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
-        return gseq_recon, gseqs
-
+        if args.model_type == 'gaze_mm':
+            gmask_seqs, gmasked_pos, gseqs, hmask_seqs, hmasked_pos, hseqs = batch
+            gseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
+            return gseq_recon, gseqs
+        elif args.model_type == 'head_gaze_mm':
+            gmask_seqs, gmasked_pos, gseqs, hmask_seqs, hmasked_pos, hseqs = batch
+            gseq_recon, hseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
+            #import pdb; pdb.set_trace();
+            return torch.concat((gseq_recon,hseq_recon), dim = 1), torch.concat((gseqs,hseqs), dim = 1)
+        else:
+            gmask_seqs, gmasked_pos, gseqs = batch
+            gseq_recon = model(gmask_seqs, gmasked_pos)
+            return gseq_recon, gseqs
+        
     def func_evaluate(seqs, gpredict_seqs):
-        gloss_lm = criterion(gpredict_seqs, seqs)
-        return gloss_lm.mean().cpu().numpy()
-    
+        if args.model_type == 'gaze_mm':
+            gloss_lm = criterion(gpredict_seqs, seqs)
+            return gloss_lm.mean().cpu().numpy()
+        elif args.model_type == 'head_gaze_mm':
+            gloss_lm = criterion(gpredict_seqs, seqs)
+            return gloss_lm.mean().cpu().numpy()
+        else:
+            gloss_lm = criterion(gpredict_seqs, seqs)
+            return gloss_lm.mean().cpu().numpy()
+
     tracker.log_parameters(train_cfg, model_cfg, mask_cfg, dataset_cfg)
     
     if hasattr(args, 'pretrain_model'):
@@ -110,10 +167,8 @@ def main(args, training_rate, tracker):
 
     return gaze_actual_test, gaze_estimate_test
 
-
 if __name__ == "__main__":
     mode = "base"
-    args = handle_argv('pretrain_' + mode, 'pretrain.json', mode)
     training_rate = 0.8
 
     tracker = tracking.MLFlowTracker("Head and Gaze Prediction ||")

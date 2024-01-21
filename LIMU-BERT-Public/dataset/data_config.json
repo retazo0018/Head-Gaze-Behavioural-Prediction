@@ -64,6 +64,12 @@
         "dimension": 3,
         "size": 62076,
         "downsample_ratio": 4
+    },
+    "gbd_2": {
+        "sr": 120,
+        "seq_len": 240,
+        "dimension": 3,
+        "size": 62076
     }
 }
 
