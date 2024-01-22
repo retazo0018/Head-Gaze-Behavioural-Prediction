@@ -171,15 +171,13 @@ if __name__ == "__main__":
         actual_test, estimate_test = main(args, training_rate, tracker)
         gaze_actual_test, gaze_estimate_test, head_actual_test, head_estimate_test  = [], [], [], []
         if args.model_type == 'head_gaze_mm':
-            for i, batch in enumerate(estimate_test):
-                seq_len = batch.shape[1]
-                gaze_len = seq_len // 2
-                gaze_estimate_test, head_estimate_test = batch[:,:gaze_len,:], batch[:,gaze_len:,:]
-                gaze_actual_test, head_actual_test = actual_test[i][:,:gaze_len,:], actual_test[i][:,gaze_len:,:]
-                gaze_actual_test.append(actual_test[i][:,:gaze_len,:])
-                gaze_estimate_test.append(batch[:,:gaze_len,:])
-                head_actual_test.append(actual_test[i][:,gaze_len:,:])
-                head_estimate_test.append(batch[:,gaze_len:,:])
+            seq_len = estimate_test.shape[1]
+            gaze_len = seq_len // 2
+            gaze_estimate_test, head_estimate_test = estimate_test[:,:gaze_len,:], estimate_test[:,gaze_len:,:]
+            gaze_actual_test, head_actual_test = actual_test[:,:gaze_len,:], actual_test[:,gaze_len:,:]
+            tracker.log_metrics("Test Dynamic Time Warping Gaze", compute_dtw_metric(gaze_estimate_test, gaze_actual_test))
+            tracker.log_metrics("Test Dynamic Time Warping Head", compute_dtw_metric(head_estimate_test, head_actual_test))
+
             datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
             tracker.log_metrics("Test Euclidean Distance Gaze", compute_euclidean_distance(gaze_estimate_test, gaze_actual_test))
             tracker.log_metrics("Test Dynamic Time Warping Gaze", compute_dtw_metric(gaze_estimate_test, gaze_actual_test))
@@ -189,10 +187,18 @@ if __name__ == "__main__":
             tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3DLine_Gaze_{datestr}.png"))
             plot.plot3DLine(head_estimate_test, head_actual_test, "3DLine_Head_", datestr)
             tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3DLine_Head_{datestr}.png"))
+
+            plot.plot2DPCA(gaze_estimate_test, gaze_actual_test, "2D_Gaze_", datestr)
+            tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Gaze_{datestr}.png"))
+            plot.plot2DPCA(head_estimate_test, head_actual_test, "2D_Head_", datestr)
+            tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Head_{datestr}.png"))
+            tracker.log_artifact(args.save_path+'.pt')
         else:
             tracker.log_metrics("Test Euclidean Distance", compute_euclidean_distance(estimate_test, actual_test))
             tracker.log_metrics("Test Dynamic Time Warping", compute_dtw_metric(estimate_test, actual_test))
             datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
+            plot.plot2DPCA(estimate_test, actual_test, "2D_", datestr)
+            tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Gaze_{datestr}.png"))
             plot.plot3DLine(estimate_test, actual_test, "3DLine_", datestr)
             tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3DLine_{datestr}.png"))
         

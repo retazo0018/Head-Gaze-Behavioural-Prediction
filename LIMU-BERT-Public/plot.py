@@ -181,12 +181,13 @@ def plot3DPCA(preds, labels):
     plt.show()
 
 
-def plot2DPCA(preds, labels):
+def plot2DPCA(preds, labels, fname, datestr, n=200):
+    indexes = np.random.choice(preds.shape[0],n, replace = False)
     preds_reshaped = preds.reshape(preds.shape[0], -1)
     labels_reshaped = labels.reshape(labels.shape[0], -1)
     pca = PCA(n_components=2)
-    preds_2d = pca.fit_transform(preds_reshaped)
-    labels_2d = pca.transform(labels_reshaped)
+    preds_2d = pca.fit_transform(preds_reshaped[indexes,:])
+    labels_2d = pca.transform(labels_reshaped[indexes,:])
 
     plt.figure(figsize=(12, 6))
 
@@ -203,7 +204,7 @@ def plot2DPCA(preds, labels):
     plt.ylabel('PCA Component 2')
 
     plt.tight_layout()
-    plt.show()
+    plt.savefig("./results/"+fname+datestr+".png")
 
 
 # if __name__ == "__main__":
