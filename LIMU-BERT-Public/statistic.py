@@ -69,3 +69,7 @@ def compute_levenschtein_distance(label, results_estimated):
     lev_distance = Levenshtein.distance(label, results_estimated)
     return lev_distance
 
+
+def compute_euclidean_distance(label, results_estimated):
+    return np.linalg.norm(np.array(label) - np.array(results_estimated))
+

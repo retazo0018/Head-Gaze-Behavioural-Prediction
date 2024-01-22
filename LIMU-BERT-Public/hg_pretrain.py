@@ -16,7 +16,7 @@ from models import LIMUBertModel4Pretrain, LIMUBertMultiMAEModel4Pretrain, LIMUB
 from utils import set_seeds, get_device, LIBERTMultiDataset4Pretrain,LIBERTGazeDataset4Pretrain, handle_argv, load_pretrain_data_config, prepare_classifier_dataset, \
     prepare_pretrain_dataset, Preprocess4Normalization,  Preprocess4Mask
 import mlflow
-from statistic import compute_dtw_metric, compute_levenschtein_distance
+from statistic import compute_dtw_metric, compute_levenschtein_distance, compute_euclidean_distance
 from hyperparameter_opt import HyperparameterOptimization
 import itertools
 
@@ -164,44 +164,37 @@ if __name__ == "__main__":
     args = handle_argv('pretrain_' + mode, 'pretrain.json', mode)
     training_rate = 0.8
     
-    tracker = tracking.MLFlowTracker("Temp")
+    tracker = tracking.MLFlowTracker("Temp 2")
     tracker.set_experiment()
 
     with mlflow.start_run(description="A MultiModal Transformer"):
         actual_test, estimate_test = main(args, training_rate, tracker)
-
-        gaze_actual_test = []
-        gaze_estimate_test = []
-        head_actual_test = []
-        head_estimate_test = []
+        gaze_actual_test, gaze_estimate_test, head_actual_test, head_estimate_test  = [], [], [], []
         if args.model_type == 'head_gaze_mm':
             for i, batch in enumerate(estimate_test):
                 seq_len = batch.shape[1]
                 gaze_len = seq_len // 2
                 gaze_estimate_test, head_estimate_test = batch[:,:gaze_len,:], batch[:,gaze_len:,:]
                 gaze_actual_test, head_actual_test = actual_test[i][:,:gaze_len,:], actual_test[i][:,gaze_len:,:]
-
                 gaze_actual_test.append(actual_test[i][:,:gaze_len,:])
                 gaze_estimate_test.append(batch[:,:gaze_len,:])
-
                 head_actual_test.append(actual_test[i][:,gaze_len:,:])
                 head_estimate_test.append(batch[:,gaze_len:,:])
-
-
-            tracker.log_metrics("Test Dynamic Time Warping", compute_dtw_metric(estimate_test, actual_test))
-
             datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
+            tracker.log_metrics("Test Euclidean Distance Gaze", compute_euclidean_distance(gaze_estimate_test, gaze_actual_test))
+            tracker.log_metrics("Test Dynamic Time Warping Gaze", compute_dtw_metric(gaze_estimate_test, gaze_actual_test))
+            tracker.log_metrics("Test Euclidean Distance Head", compute_euclidean_distance(head_estimate_test, head_actual_test))
+            tracker.log_metrics("Test Dynamic Time Warping Head", compute_dtw_metric(head_estimate_test, head_actual_test))
             plot.plot3DLine(gaze_estimate_test, gaze_actual_test, "3DLine_Gaze_", datestr)
             tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3DLine_Gaze_{datestr}.png"))
             plot.plot3DLine(head_estimate_test, head_actual_test, "3DLine_Head_", datestr)
             tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3DLine_Head_{datestr}.png"))
-            tracker.log_artifact(args.save_path+'.pt')
         else:
-           # tracker.log_metrics("Test Levenschtein Distance", compute_levenschtein_distance(gaze_estimate_test, gaze_actual_test))
+            tracker.log_metrics("Test Euclidean Distance", compute_euclidean_distance(estimate_test, actual_test))
             tracker.log_metrics("Test Dynamic Time Warping", compute_dtw_metric(estimate_test, actual_test))
-
             datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
             plot.plot3DLine(estimate_test, actual_test, "3DLine_", datestr)
             tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3DLine_{datestr}.png"))
-            tracker.log_artifact(args.save_path+'.pt')
+        
+        tracker.log_artifact(args.save_path+'.pt')
 
