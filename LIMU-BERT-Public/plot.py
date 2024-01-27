@@ -207,4 +207,3 @@ def plot2DPCA(preds, labels, fname, datestr, n=200):
     plt.savefig("./results/"+fname+datestr+".png")
 
 
-# if __name__ == "__main__":
