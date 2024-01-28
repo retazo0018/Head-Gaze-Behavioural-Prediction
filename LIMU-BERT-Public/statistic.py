@@ -9,7 +9,7 @@ import numpy as np
 from sklearn import metrics
 from sklearn.metrics import f1_score
 from fastdtw import fastdtw
-#import Levenshtein
+import Levenshtein
 from plot import plot_matrix
 
 

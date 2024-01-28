@@ -2,8 +2,8 @@
     "seed": 3431,
     "batch_size": 64,
     "lr": 1e-3,
-    "n_epochs": 1,
+    "n_epochs": 5,
     "warmup": 0.1,
     "save_steps": 1000,
-    "total_steps": 2000
+    "total_steps": 20000000
 }

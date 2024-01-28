@@ -153,7 +153,7 @@ def main(args, training_rate, tracker):
     tracker.log_metrics("Train Loss", train_loss)
     tracker.log_metrics("Val Loss", val_loss)
     tracker.log_metrics("Test Loss", test_loss)
-        
+
     estimate_test, actual_test = trainer.run(func_forward, None, data_loader_test, return_labels=True)
 
     return actual_test, estimate_test

@@ -329,7 +329,8 @@ class Preprocess4Mask:
             elif np.random.rand() < self.replace_prob:
                 instance_mask[mask_pos, :] = np.random.random((len(mask_pos), shape[1]))
         seq = instance[mask_pos_index, :]
-        return instance_mask, np.array(mask_pos_index), np.array(seq)
+        #seq = instance
+        return instance_mask, np.array(mask_pos_index), np.array(seq)    
 
 
 class IMUDataset(Dataset):
