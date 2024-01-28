@@ -112,26 +112,26 @@ def main(args, training_rate, tracker):
         if args.model_type == 'gaze':
             gmask_seqs, gmasked_pos, gseqs = batch
             gseq_recon = model(gmask_seqs, gmasked_pos)
-            sph_coords_recon, sph_coords = conv_spherical(gseq_recon), conv_spherical(gseqs)
-            gloss_lm = criterion(sph_coords_recon, sph_coords) 
-            #gloss_lm = criterion(gseq_recon, gseqs) 
+            #sph_coords_recon, sph_coords = conv_spherical(gseq_recon), conv_spherical(gseqs)
+            #gloss_lm = criterion(sph_coords_recon, sph_coords) 
+            gloss_lm = criterion(gseq_recon, gseqs) 
             loss_lm = gloss_lm
         else:    
             gmask_seqs, gmasked_pos, gseqs, hmask_seqs, hmasked_pos, hseqs = batch
             if args.model_type == 'gaze_mm':
                 gseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
-                sph_coords_recon, sph_coords = conv_spherical(gseq_recon), conv_spherical(gseqs)
-                gloss_lm = criterion(sph_coords_recon, sph_coords) 
-                #gloss_lm = criterion(gseq_recon, gseqs)
+                #sph_coords_recon, sph_coords = conv_spherical(gseq_recon), conv_spherical(gseqs)
+                #gloss_lm = criterion(sph_coords_recon, sph_coords) 
+                gloss_lm = criterion(gseq_recon, gseqs)
                 loss_lm = gloss_lm
             elif args.model_type == 'head_gaze_mm':
                 gseq_recon, hseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
-                sph_coords_recon, sph_coords = conv_spherical(gseq_recon), conv_spherical(gseqs)
-                h_sph_coords_recon, h_sph_coords = conv_spherical(hseq_recon), conv_spherical(hseqs)
-                gloss_lm = criterion(sph_coords_recon, sph_coords) 
-                hloss_lm = criterion(h_sph_coords_recon, h_sph_coords)
-                #gloss_lm = criterion(gseq_recon, gseqs)
-                # hloss_lm = criterion(hseq_recon, hseqs)
+                #sph_coords_recon, sph_coords = conv_spherical(gseq_recon), conv_spherical(gseqs)
+                #h_sph_coords_recon, h_sph_coords = conv_spherical(hseq_recon), conv_spherical(hseqs)
+                #gloss_lm = criterion(sph_coords_recon, sph_coords) 
+                #hloss_lm = criterion(h_sph_coords_recon, h_sph_coords)
+                gloss_lm = criterion(gseq_recon, gseqs)
+                hloss_lm = criterion(hseq_recon, hseqs)
                 loss_lm = gloss_lm + hloss_lm
         return loss_lm
 
