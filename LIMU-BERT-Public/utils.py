@@ -394,7 +394,6 @@ class LIBERTDataset4Pretrain(Dataset):
 
 
 class LIBERTGazeDataset4Pretrain(Dataset):
-    """ Load sentence pair (sequential or random order) from corpus """
     def __init__(self, gaze, pipeline=[]):
         super().__init__()
         self.pipeline = pipeline
