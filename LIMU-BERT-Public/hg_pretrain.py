@@ -151,19 +151,19 @@ def main(args, training_rate, tracker):
         
     def func_evaluate(seqs, predict_seqs):
         if args.model_type == 'gaze_mm':
-            sph_coords_recon, sph_coords = conv_spherical(predict_seqs), conv_spherical(seqs)
-            gloss_lm = criterion(sph_coords_recon, sph_coords) 
-            #gloss_lm = criterion(predict_seqs, seqs)
+            #sph_coords_recon, sph_coords = conv_spherical(predict_seqs), conv_spherical(seqs)
+            #gloss_lm = criterion(sph_coords_recon, sph_coords) 
+            gloss_lm = criterion(predict_seqs, seqs)
             return gloss_lm.mean().cpu().numpy()
         elif args.model_type == 'head_gaze_mm':
-            sph_coords_recon, sph_coords = conv_spherical(predict_seqs), conv_spherical(seqs)
-            hgloss_lm = criterion(sph_coords_recon, sph_coords) 
-            #hgloss_lm = criterion(predict_seqs, seqs)
+            #sph_coords_recon, sph_coords = conv_spherical(predict_seqs), conv_spherical(seqs)
+            #hgloss_lm = criterion(sph_coords_recon, sph_coords) 
+            hgloss_lm = criterion(predict_seqs, seqs)
             return hgloss_lm.mean().cpu().numpy()
         else:
-            sph_coords_recon, sph_coords = conv_spherical(predict_seqs), conv_spherical(seqs)
-            gloss_lm = criterion(sph_coords_recon, sph_coords) 
-            #gloss_lm = criterion(predict_seqs, seqs)
+            #sph_coords_recon, sph_coords = conv_spherical(predict_seqs), conv_spherical(seqs)
+            #gloss_lm = criterion(sph_coords_recon, sph_coords) 
+            gloss_lm = criterion(predict_seqs, seqs)
             return gloss_lm.mean().cpu().numpy()
 
     tracker.log_parameters(train_cfg, model_cfg, mask_cfg, dataset_cfg)
