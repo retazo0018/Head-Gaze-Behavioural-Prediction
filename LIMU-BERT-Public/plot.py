@@ -14,6 +14,7 @@ from sklearn import metrics
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from matplotlib import pyplot
+import random
 
 SENSORS = ["Accelerometer", "Gyroscope", "Magnetometer"]
 SENSOR_NAMES = ['ACC-X', 'ACC-Y', 'ACC-Z', 'GYRO-X', 'GYRO-Y', 'GYRO-Z', 'MAG-X', 'MAG-Y', 'MAG-Z']
@@ -207,4 +208,88 @@ def plot2DPCA(preds, labels, fname, datestr, n=200):
     plt.savefig("./results/"+fname+datestr+".png")
 
 
-# if __name__ == "__main__":
+def spherical_to_cartesian(spherical_coords):
+    # Convert spherical coordinates (theta, phi) to cartesian coordinates (x, y, z)
+    theta, phi = spherical_coords[:, 0], spherical_coords[:, 1]
+    x = np.sin(phi) * np.cos(theta)
+    y = np.sin(phi) * np.sin(theta)
+    z = np.cos(phi)
+    return x, y, z
+
+def plot_sequences_3d(preds, labels, fname, datestr, n=16):
+
+    ind = random.sample(range(preds.shape[0]), n)
+    to_visualize_preds, to_visualize_labels = preds[ind], labels[ind]
+
+    num_rows = int(np.ceil(np.sqrt(n)))
+    num_cols = int(np.ceil(n / num_rows))
+
+    fig = plt.figure(figsize=(15, 10))
+
+    for i in range(n):
+        ax = fig.add_subplot(num_rows, num_cols, i+1, projection='3d')
+        x_pred, y_pred, z_pred = spherical_to_cartesian(to_visualize_preds[i])
+        x_label, y_label, z_label = spherical_to_cartesian(to_visualize_labels[i])
+
+        # Plot predictions
+        ax.scatter(x_pred, y_pred, z_pred, color='blue', label='Predicted Gaze')
+
+        # Plot labels
+        ax.scatter(x_label, y_label, z_label, color='red', label='Actual Gaze')
+
+        # Setting plot title
+        ax.set_title(f'Seq {ind[i]}')
+
+        # Hide axes ticks
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_zticks([])
+
+    # Adding a legend
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(handles, labels, loc='upper center')
+
+
+    plt.savefig("./results/"+fname+datestr+".png")
+
+
+
+def plot_sequences_2d(preds, labels, fname, datestr, n=16):
+
+    ind = random.sample(range(preds.shape[0]), n)
+    to_visualize_preds, to_visualize_labels = preds[ind], labels[ind]
+
+    num_rows = int(np.ceil(np.sqrt(n)))
+    num_cols = int(np.ceil(n / num_rows))
+
+    fig = plt.figure(figsize=(15, 10))
+
+    for i in range(n):
+        theta_pred = to_visualize_preds[i,:,0]
+        phi_pred = to_visualize_preds[i,:,1]
+        theta_label = to_visualize_labels[i,:,0]
+        phi_label = to_visualize_labels[i,:,1]
+
+        ax = fig.add_subplot(num_rows, num_cols, i+1)
+        
+        time_x = range(theta_pred.shape[-1])
+
+        # Plot predictions
+        ax.plot(time_x, theta_pred, color='blue', label='Predicted Gaze Theta')
+        ax.plot(time_x, phi_pred, color='green', label='Predicted Gaze Phi')
+        # Plot labels
+        ax.plot(time_x, theta_label, color='red', label='Actual Gaze Theta')
+        ax.plot(time_x, phi_label, color='yellow', label='Actual Gaze Phi')
+
+        # Setting plot title
+        ax.set_title(f'Seq {ind[i]}')
+
+        # Hide axes ticks
+        ax.set_xticks([])
+        ax.set_yticks([])
+    # Adding a legend
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(handles, labels, loc='upper center')
+
+
+    plt.savefig("./results/"+fname+datestr+".png")

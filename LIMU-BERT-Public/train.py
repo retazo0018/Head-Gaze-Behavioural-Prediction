@@ -26,7 +26,7 @@ class Trainer(object):
         self.device = device # device name
 
     def pretrain(self, func_loss, func_forward, func_evaluate
-              , data_loader_train, data_loader_val, data_loader_test, model_file=None, data_parallel=False):
+              , data_loader_train, data_loader_val, data_loader_test, model_file=None, data_parallel=False, tracker=None):
         """ Train Loop """
         self.load(model_file)
         model = self.model.to(self.device)
@@ -65,6 +65,9 @@ class Trainer(object):
             loss_eva = self.run(func_forward, func_evaluate, data_loader_val)
             print('Epoch %d/%d : Average Loss %5.4f. Val Loss %5.4f'
                     % (e + 1, self.cfg.n_epochs, loss_sum / len(data_loader_train), loss_eva))
+            
+            tracker.log_metrics("Train Loss", loss_sum / len(data_loader_train))
+            tracker.log_metrics("Val Loss", loss_eva)
             # print("Train execution time: %.5f seconds" % (time_sum / len(self.data_loader)))
             if loss_eva < best_loss:
                 best_loss = loss_eva
