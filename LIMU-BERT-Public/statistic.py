@@ -71,5 +71,4 @@ def compute_levenschtein_distance(label, results_estimated):
 
 
 def compute_euclidean_distance(label, results_estimated):
-    return np.linalg.norm(np.array(label) - np.array(results_estimated))
-
+    return np.linalg.norm(np.array(label).astype("float32") - np.array(results_estimated).astype("float32"))
