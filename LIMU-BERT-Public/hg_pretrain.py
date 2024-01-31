@@ -76,7 +76,7 @@ def main(args, training_rate, tracker):
         model = LIMUBertAEModel4Pretrain(model_cfg)
         data_set_train = dataset_pretrain(gdata_train, pipeline=pipeline)
         data_set_val = dataset_pretrain(gdata_val, pipeline=pipeline)
-        data_set_test = dataset_pretrain(gdata_test, pipeline=pipeline)
+        data_set_test = dataset_pretrain(gdata_test, pipeline=pipeline, istestset=True)
     else:
         dataset_pretrain = LIBERTMultiDataset4Pretrain
         if args.model_type == 'gaze_mm':
@@ -175,7 +175,7 @@ if __name__ == "__main__":
     args = handle_argv('pretrain_' + mode, 'pretrain.json', mode)
     training_rate = 0.8
     
-    tracker = tracking.MLFlowTracker("Gaze MM")
+    tracker = tracking.MLFlowTracker("Final")
     tracker.set_experiment()
 
     with mlflow.start_run(description="A MultiModal Transformer"):
@@ -190,6 +190,10 @@ if __name__ == "__main__":
             tracker.log_metrics("Test Euclidean Distance Head", compute_euclidean_distance(head_estimate_test, head_actual_test))
             tracker.log_metrics("Test Euclidean Distance Gaze", compute_euclidean_distance(gaze_estimate_test, gaze_actual_test))
             tracker.log_metrics("Test Dynamic Time Warping Gaze", compute_dtw_metric(gaze_estimate_test, gaze_actual_test))
+            tracker.log_metrics("Test Euclidean Distance", 
+                (compute_euclidean_distance(gaze_estimate_test, gaze_actual_test)+compute_euclidean_distance(head_estimate_test, head_actual_test))/2)
+            tracker.log_metrics("Test Dynamic Time Warping", 
+                (compute_dtw_metric(gaze_estimate_test, gaze_actual_test)+compute_dtw_metric(head_estimate_test, head_actual_test))/2)
 
             datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
             plot.plot_sequences_3d(gaze_estimate_test, gaze_actual_test, "3D_Spherical_Coord_Gaze_", datestr)

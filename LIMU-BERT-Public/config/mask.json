@@ -1,5 +1,5 @@
 {
-    "mask_ratio": 0.6,
+    "mask_ratio": 0.7,
     "mask_alpha": 6,
     "max_gram": 10,
     "mask_prob": 0.9,
