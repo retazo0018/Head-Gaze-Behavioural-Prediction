@@ -191,9 +191,9 @@ if __name__ == "__main__":
             tracker.log_metrics("Test Euclidean Distance Gaze", compute_euclidean_distance(gaze_estimate_test, gaze_actual_test))
             tracker.log_metrics("Test Dynamic Time Warping Gaze", compute_dtw_metric(gaze_estimate_test, gaze_actual_test))
             tracker.log_metrics("Test Euclidean Distance", 
-                (compute_euclidean_distance(gaze_estimate_test, gaze_actual_test)+compute_euclidean_distance(head_estimate_test, head_actual_test))/2)
+                compute_euclidean_distance(gaze_estimate_test, gaze_actual_test)+compute_euclidean_distance(head_estimate_test, head_actual_test))
             tracker.log_metrics("Test Dynamic Time Warping", 
-                (compute_dtw_metric(gaze_estimate_test, gaze_actual_test)+compute_dtw_metric(head_estimate_test, head_actual_test))/2)
+                compute_dtw_metric(gaze_estimate_test, gaze_actual_test)+compute_dtw_metric(head_estimate_test, head_actual_test))
 
             datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
             plot.plot_sequences_3d(gaze_estimate_test, gaze_actual_test, "3D_Spherical_Coord_Gaze_", datestr)
