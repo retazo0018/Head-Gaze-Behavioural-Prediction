@@ -79,6 +79,14 @@ def span_mask(seq_len, max_gram=3, p=0.2, goal_num_predict=15):
     return list(mask_pos)
 
 
+def cont_mask(seq_len):
+    half = seq_len//2
+    mask_pos = set()
+    for i in range(half-30,half+30):
+        mask_pos.add(i)
+    return list(mask_pos)
+
+
 def merge_dataset(data, label, mode='all'):
     index = np.zeros(data.shape[0], dtype=bool)
     label_new = []
@@ -287,6 +295,7 @@ class Preprocess4Mask:
         self.max_gram = mask_cfg.max_gram
         self.mask_prob = mask_cfg.mask_prob
         self.replace_prob = mask_cfg.replace_prob
+        self.isbaseline = False
 
     def gather(self, data, position1, position2):
         result = []
@@ -304,7 +313,7 @@ class Preprocess4Mask:
             data[position1[i], position2[i]] = np.random.random(position2[i].size)
         return data
 
-    def __call__(self, instance, ismask=True):
+    def __call__(self, instance, istestset, ismask=True):
         shape = instance.shape
 
         # the number of prediction is sometimes less than max_pred when sequence is short
@@ -312,24 +321,33 @@ class Preprocess4Mask:
 
         # For masked Language Models
         # mask_pos = bert_mask(shape[0], n_pred)
-        mask_pos = span_mask(shape[0], self.max_gram,  goal_num_predict=n_pred)
-
         instance_mask = instance.copy()
-
-        if isinstance(mask_pos, tuple):
-            mask_pos_index = mask_pos[0]
-            if np.random.rand() < self.mask_prob:
-                self.mask(instance_mask, mask_pos[0], mask_pos[1])
-            elif np.random.rand() < self.replace_prob:
-                self.replace(instance_mask, mask_pos[0], mask_pos[1])
-        else:
+    
+        if istestset:
+            mask_pos = cont_mask(shape[0])
+            for p in mask_pos:
+                instance_mask[p, :] = np.zeros((1,3))
             mask_pos_index = mask_pos
-            if np.random.rand() < self.mask_prob:
-                instance_mask[mask_pos, :] = np.zeros((len(mask_pos), shape[1]))
-            elif np.random.rand() < self.replace_prob:
-                instance_mask[mask_pos, :] = np.random.random((len(mask_pos), shape[1]))
+        else:
+            mask_pos = span_mask(shape[0], self.max_gram,  goal_num_predict=n_pred)
+            if isinstance(mask_pos, tuple):
+                mask_pos_index = mask_pos[0]
+                if np.random.rand() < self.mask_prob:
+                    self.mask(instance_mask, mask_pos[0], mask_pos[1])
+                elif np.random.rand() < self.replace_prob:
+                    self.replace(instance_mask, mask_pos[0], mask_pos[1])
+            else:
+                mask_pos_index = mask_pos
+                if np.random.rand() < self.mask_prob:
+                    instance_mask[mask_pos, :] = np.zeros((len(mask_pos), shape[1]))
+                elif np.random.rand() < self.replace_prob:
+                    instance_mask[mask_pos, :] = np.random.random((len(mask_pos), shape[1]))
         seq = instance[mask_pos_index, :]
-        return instance_mask, np.array(mask_pos_index), np.array(seq)
+        
+        if self.isbaseline:
+            return instance_mask, np.array(mask_pos_index), np.array(instance)    
+        else:
+            return instance_mask, np.array(mask_pos_index), np.array(seq)    
 
 
 class IMUDataset(Dataset):
@@ -394,15 +412,16 @@ class LIBERTDataset4Pretrain(Dataset):
 
 
 class LIBERTGazeDataset4Pretrain(Dataset):
-    def __init__(self, gaze, pipeline=[]):
+    def __init__(self, gaze, pipeline=[], istestset=False):
         super().__init__()
         self.pipeline = pipeline
         self.gaze = gaze
+        self.istestset = istestset
 
     def __getitem__(self, index):
         ginstance = self.gaze[index] # 1 Gaze sequence
         for proc in self.pipeline:
-            ginstance = proc(ginstance)
+            ginstance = proc(ginstance, self.istestset)
         gmask_seq, gmasked_pos, gseq = ginstance
         return torch.from_numpy(gmask_seq), torch.from_numpy(gmasked_pos).long(), torch.from_numpy(gseq)
 
@@ -412,18 +431,19 @@ class LIBERTGazeDataset4Pretrain(Dataset):
 
 class LIBERTMultiDataset4Pretrain(Dataset):
     """ Load sentence pair (sequential or random order) from corpus """
-    def __init__(self, gaze, head, pipeline=[]):
+    def __init__(self, gaze, head, pipeline=[], istestset=False):
         super().__init__()
         self.pipeline = pipeline
         self.gaze = gaze
         self.head = head
+        self.istestset = True
 
     def __getitem__(self, index):
         ginstance = self.gaze[index] # 1 Gaze sequence
         hinstance = self.head[index] # 1 Head sequence
         for proc in self.pipeline:
-            ginstance = proc(ginstance)
-            hinstance = proc(hinstance)
+            ginstance = proc(ginstance, self.istestset)
+            hinstance = proc(hinstance, self.istestset)
         gmask_seq, gmasked_pos, gseq = ginstance
         hmask_seq, hmasked_pos, hseq = hinstance
         return torch.from_numpy(gmask_seq), torch.from_numpy(gmasked_pos).long(), torch.from_numpy(gseq), torch.from_numpy(hmask_seq), torch.from_numpy(hmasked_pos).long(), torch.from_numpy(hseq)

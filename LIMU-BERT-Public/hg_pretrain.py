@@ -16,7 +16,7 @@ from models import LIMUBertModel4Pretrain, LIMUBertMultiMAEModel4Pretrain, LIMUB
 from utils import set_seeds, get_device, LIBERTMultiDataset4Pretrain,LIBERTGazeDataset4Pretrain, handle_argv, load_pretrain_data_config, prepare_classifier_dataset, \
     prepare_pretrain_dataset, Preprocess4Normalization,  Preprocess4Mask
 import mlflow
-from statistic import compute_dtw_metric, compute_levenschtein_distance
+from statistic import compute_dtw_metric, compute_levenschtein_distance, compute_euclidean_distance
 from hyperparameter_opt import HyperparameterOptimization
 import itertools
 
@@ -76,7 +76,7 @@ def main(args, training_rate, tracker):
         model = LIMUBertAEModel4Pretrain(model_cfg)
         data_set_train = dataset_pretrain(gdata_train, pipeline=pipeline)
         data_set_val = dataset_pretrain(gdata_val, pipeline=pipeline)
-        data_set_test = dataset_pretrain(gdata_test, pipeline=pipeline)
+        data_set_test = dataset_pretrain(gdata_test, pipeline=pipeline, istestset=True)
     else:
         dataset_pretrain = LIBERTMultiDataset4Pretrain
         if args.model_type == 'gaze_mm':
@@ -111,25 +111,17 @@ def main(args, training_rate, tracker):
     def func_loss(model, batch):
         if args.model_type == 'gaze':
             gmask_seqs, gmasked_pos, gseqs = batch
-            gseq_recon = model(gmask_seqs, gmasked_pos)
-            #sph_coords_recon, sph_coords = conv_spherical(gseq_recon), conv_spherical(gseqs)
-            #gloss_lm = criterion(sph_coords_recon, sph_coords) 
+            gseq_recon = model(gmask_seqs, gmasked_pos) 
             gloss_lm = criterion(gseq_recon, gseqs) 
             loss_lm = gloss_lm
         else:    
             gmask_seqs, gmasked_pos, gseqs, hmask_seqs, hmasked_pos, hseqs = batch
             if args.model_type == 'gaze_mm':
-                gseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
-                #sph_coords_recon, sph_coords = conv_spherical(gseq_recon), conv_spherical(gseqs)
-                #gloss_lm = criterion(sph_coords_recon, sph_coords) 
+                gseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos) 
                 gloss_lm = criterion(gseq_recon, gseqs)
                 loss_lm = gloss_lm
             elif args.model_type == 'head_gaze_mm':
                 gseq_recon, hseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
-                #sph_coords_recon, sph_coords = conv_spherical(gseq_recon), conv_spherical(gseqs)
-                #h_sph_coords_recon, h_sph_coords = conv_spherical(hseq_recon), conv_spherical(hseqs)
-                #gloss_lm = criterion(sph_coords_recon, sph_coords) 
-                #hloss_lm = criterion(h_sph_coords_recon, h_sph_coords)
                 gloss_lm = criterion(gseq_recon, gseqs)
                 hloss_lm = criterion(hseq_recon, hseqs)
                 loss_lm = gloss_lm + hloss_lm
@@ -151,18 +143,12 @@ def main(args, training_rate, tracker):
         
     def func_evaluate(seqs, predict_seqs):
         if args.model_type == 'gaze_mm':
-            #sph_coords_recon, sph_coords = conv_spherical(predict_seqs), conv_spherical(seqs)
-            #gloss_lm = criterion(sph_coords_recon, sph_coords) 
             gloss_lm = criterion(predict_seqs, seqs)
             return gloss_lm.mean().cpu().numpy()
         elif args.model_type == 'head_gaze_mm':
-            #sph_coords_recon, sph_coords = conv_spherical(predict_seqs), conv_spherical(seqs)
-            #hgloss_lm = criterion(sph_coords_recon, sph_coords) 
             hgloss_lm = criterion(predict_seqs, seqs)
             return hgloss_lm.mean().cpu().numpy()
         else:
-            #sph_coords_recon, sph_coords = conv_spherical(predict_seqs), conv_spherical(seqs)
-            #gloss_lm = criterion(sph_coords_recon, sph_coords) 
             gloss_lm = criterion(predict_seqs, seqs)
             return gloss_lm.mean().cpu().numpy()
 
@@ -175,10 +161,8 @@ def main(args, training_rate, tracker):
         val_loss, test_loss, train_loss = trainer.pretrain(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_val, data_loader_test, model_file=None, tracker=tracker)
 
     tracker.log_model(model, "models")
-    #tracker.log_metrics("Train Loss", train_loss)
-    #tracker.log_metrics("Val Loss", val_loss)
     tracker.log_metrics("Test Loss", test_loss)
-        
+
     estimate_test, actual_test = trainer.run(func_forward, None, data_loader_test, return_labels=True)
 
     estimate_test_sph, actual_test_sph = conv_spherical(estimate_test), conv_spherical(actual_test)
@@ -191,29 +175,27 @@ if __name__ == "__main__":
     args = handle_argv('pretrain_' + mode, 'pretrain.json', mode)
     training_rate = 0.8
     
-    tracker = tracking.MLFlowTracker("Temp")
+    tracker = tracking.MLFlowTracker("Final")
     tracker.set_experiment()
 
     with mlflow.start_run(description="A MultiModal Transformer"):
         actual_test, estimate_test = main(args, training_rate, tracker)
-        #import pdb; pdb.set_trace()
-        gaze_actual_test = []
-        gaze_estimate_test = []
-        head_actual_test = []
-        head_estimate_test = []
+        gaze_actual_test, gaze_estimate_test, head_actual_test, head_estimate_test  = [], [], [], []
         if args.model_type == 'head_gaze_mm':
             seq_len = estimate_test.shape[1]
             gaze_len = seq_len // 2
             gaze_estimate_test, head_estimate_test = estimate_test[:,:gaze_len,:], estimate_test[:,gaze_len:,:]
             gaze_actual_test, head_actual_test = actual_test[:,:gaze_len,:], actual_test[:,gaze_len:,:]
-            tracker.log_metrics("Test Dynamic Time Warping Gaze", compute_dtw_metric(gaze_estimate_test, gaze_actual_test))
             tracker.log_metrics("Test Dynamic Time Warping Head", compute_dtw_metric(head_estimate_test, head_actual_test))
+            tracker.log_metrics("Test Euclidean Distance Head", compute_euclidean_distance(head_estimate_test, head_actual_test))
+            tracker.log_metrics("Test Euclidean Distance Gaze", compute_euclidean_distance(gaze_estimate_test, gaze_actual_test))
+            tracker.log_metrics("Test Dynamic Time Warping Gaze", compute_dtw_metric(gaze_estimate_test, gaze_actual_test))
+            tracker.log_metrics("Test Euclidean Distance", 
+                compute_euclidean_distance(gaze_estimate_test, gaze_actual_test)+compute_euclidean_distance(head_estimate_test, head_actual_test))
+            tracker.log_metrics("Test Dynamic Time Warping", 
+                compute_dtw_metric(gaze_estimate_test, gaze_actual_test)+compute_dtw_metric(head_estimate_test, head_actual_test))
 
             datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
-            #plot.plot3DLine(gaze_estimate_test, gaze_actual_test, "3DLine_Gaze_", datestr)
-            #tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3DLine_Gaze_{datestr}.png"))
-            #plot.plot3DLine(head_estimate_test, head_actual_test, "3DLine_Head_", datestr)
-            #tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3DLine_Head_{datestr}.png"))
             plot.plot_sequences_3d(gaze_estimate_test, gaze_actual_test, "3D_Spherical_Coord_Gaze_", datestr)
             tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3D_Spherical_Coord_Gaze_{datestr}.png"))
             plot.plot_sequences_3d(head_estimate_test, head_actual_test, "3D_Spherical_Coord_Head_", datestr)
@@ -222,22 +204,14 @@ if __name__ == "__main__":
             tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Spherical_Coord_Gaze_{datestr}.png"))
             plot.plot_sequences_2d(head_estimate_test, head_actual_test, "2D_Spherical_Coord_Head_", datestr)
             tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Spherical_Coord_Head_{datestr}.png"))
-            #plot.plot2DPCA(gaze_estimate_test, gaze_actual_test, "2D_Gaze_", datestr)
-            #tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Gaze_{datestr}.png"))
-            #plot.plot2DPCA(head_estimate_test, head_actual_test, "2D_Head_", datestr)
-            #tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Head_{datestr}.png"))
             tracker.log_artifact(args.save_path+'.pt')
         else:
-           # tracker.log_metrics("Test Levenschtein Distance", compute_levenschtein_distance(gaze_estimate_test, gaze_actual_test))
+            tracker.log_metrics("Test Euclidean Distance", compute_euclidean_distance(estimate_test, actual_test))
             tracker.log_metrics("Test Dynamic Time Warping", compute_dtw_metric(estimate_test, actual_test))
             datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
             plot.plot_sequences_3d(estimate_test, actual_test, "3D_Spherical_Coord_Gaze_", datestr)
             tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3D_Spherical_Coord_Gaze_{datestr}.png"))
             plot.plot_sequences_2d(estimate_test, actual_test, "2D_Spherical_Coord_Gaze_", datestr)
             tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Spherical_Coord_Gaze_{datestr}.png"))
-            # plot.plot2DPCA(estimate_test, actual_test, "2D_", datestr)
-            # tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Gaze_{datestr}.png"))
-            #plot.plot3DLine(estimate_test, actual_test, "3DLine_", datestr)
-            #tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3DLine_{datestr}.png"))
-            #tracker.log_artifact(args.save_path+'.pt')
+            tracker.log_artifact(args.save_path+'.pt')
 
