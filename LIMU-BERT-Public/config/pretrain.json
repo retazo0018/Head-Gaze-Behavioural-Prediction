@@ -2,15 +2,8 @@
     "seed": 18,
     "batch_size": 32,
     "lr": 1e-3,
-<<<<<<< HEAD
     "n_epochs": 5,
     "warmup": 0.1,
     "save_steps": 1000,
     "total_steps": 200000
-=======
-    "n_epochs": 10,
-    "warmup": 0.1,
-    "save_steps": 1000,
-    "total_steps": 20000000
->>>>>>> am_dev
 }

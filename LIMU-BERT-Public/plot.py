@@ -216,8 +216,8 @@ def spherical_to_cartesian(spherical_coords):
     z = np.cos(phi)
     return x, y, z
 
-def plot_sequences_3d(preds, labels, fname, datestr, n=16):
-
+def plot_sequences_3d(preds, labels, fname, datestr, n=16, seed=42):
+    random.seed(seed)
     ind = random.sample(range(preds.shape[0]), n)
     to_visualize_preds, to_visualize_labels = preds[ind], labels[ind]
 
@@ -254,8 +254,8 @@ def plot_sequences_3d(preds, labels, fname, datestr, n=16):
 
 
 
-def plot_sequences_2d(preds, labels, fname, datestr, n=16):
-
+def plot_sequences_2d(preds, labels, fname, datestr, n=16, seed=42):
+    random.seed(seed)
     ind = random.sample(range(preds.shape[0]), n)
     to_visualize_preds, to_visualize_labels = preds[ind], labels[ind]
 

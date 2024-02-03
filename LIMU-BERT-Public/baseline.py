@@ -38,7 +38,9 @@ data_set_test = LIBERTGazeDataset4Pretrain(gdata_test, pipeline=pipeline, istest
 # data_loader_train = DataLoader(data_set_train, shuffle=True, batch_size=data_set_train.__len__())
 data_loader_test = DataLoader(data_set_test, shuffle=False, batch_size=data_set_test.__len__())
 
-tracker = tracking.MLFlowTracker("Final")
+seed = 2024
+
+tracker = tracking.MLFlowTracker(f"Inference: Seed = {str(seed)}")
 tracker.set_experiment()
 
 # Apply interpolation to each sample in the array
@@ -58,7 +60,7 @@ tracker.log_metrics("Test Euclidean Distance", compute_euclidean_distance(estima
 tracker.log_metrics("Test Dynamic Time Warping", compute_dtw_metric(estimate_test_sph, actual_test_sph))
 
 datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
-plot.plot_sequences_3d(estimate_test_sph, actual_test_sph, "3D_Spherical_Coord_Gaze_", datestr)
+plot.plot_sequences_3d(estimate_test_sph, actual_test_sph, "3D_Spherical_Coord_Gaze_", datestr, seed=seed)
 tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3D_Spherical_Coord_Gaze_{datestr}.png"))
-plot.plot_sequences_2d(estimate_test_sph, actual_test_sph, "2D_Spherical_Coord_Head_", datestr)
+plot.plot_sequences_2d(estimate_test_sph, actual_test_sph, "2D_Spherical_Coord_Head_", datestr, seed=seed)
 tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Spherical_Coord_Head_{datestr}.png"))
