@@ -1,6 +1,6 @@
 # Data Hyperparameters
-D_SEQLEN : [240] #[90,120,180,240]
-D_MASKRATIO: [0.4,0.6]
+D_SEQLEN: [240] #[90,120,180,240]
+D_MASKRATIO: [0.5,0.4,0.6]
 
 # Model Hyperparameters
 M_NLAYERS: [4]
@@ -11,8 +11,5 @@ M_FEATURENUM: [3]
 
 # Train Hyperparameters
 T_NUMEPOCHS: [15]
-T_LR: [0.001,0.0005,0.0001,0.01]
-T_BATCHSIZE: [64,96,128]
-T_TRAINTESTRATIO: [0.8,0.9]
-T_LOSS: ['MSE']
-T_OPTIMIZER: ['Adadelta', 'Adagrad', 'Adam', 'RMSprop', 'SGD']
+T_LR: [0.001]
+T_BATCHSIZE: [64,96,32]
