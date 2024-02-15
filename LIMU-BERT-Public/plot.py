@@ -281,6 +281,9 @@ def plot_sequences_2d(preds, labels, fname, datestr, n=16, seed=42):
         ax.plot(time_x, theta_label, color='red', label='Actual Gaze Theta')
         ax.plot(time_x, phi_label, color='yellow', label='Actual Gaze Phi')
 
+        #ax.set_xlabel('Time')
+        ax.set_ylabel('Angle')
+
         # Setting plot title
         ax.set_title(f'Seq {ind[i]}')
 

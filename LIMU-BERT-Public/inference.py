@@ -134,7 +134,15 @@ def main(args, training_rate, tracker, model):
         if args.model_type == 'gaze_mm':
             gmask_seqs, gmasked_pos, gseqs, hmask_seqs, hmasked_pos, hseqs = batch
             gseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
-            return gseq_recon, gseqs
+            
+            gestimate_recon_only = torch.empty((0, 60, dataset_cfg.dimension)).to(device)
+            gactual_masked = torch.empty((0, 60, dataset_cfg.dimension)).to(device)
+            for seq in range(gmask_seqs.shape[0]):
+                #import pdb; pdb.set_trace();
+                gestimate_recon_only = torch.concatenate((gestimate_recon_only,torch.unsqueeze(gseq_recon[seq], axis=0)), axis=0)
+                gactual_masked = torch.concatenate((gactual_masked ,torch.unsqueeze(gseqs[seq], axis=0)), axis=0)
+            return gestimate_recon_only, gactual_masked
+            #return gseq_recon, gseqs
         elif args.model_type == 'head_gaze_mm':
             gmask_seqs, gmasked_pos, gseqs, hmask_seqs, hmasked_pos, hseqs = batch
             gseq_recon, hseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
@@ -142,7 +150,17 @@ def main(args, training_rate, tracker, model):
         else:
             gmask_seqs, gmasked_pos, gseqs = batch
             gseq_recon = model(gmask_seqs, gmasked_pos)
-            return gseq_recon, gseqs
+            
+            gestimate_recon_only = torch.empty((0, 60, dataset_cfg.dimension)).to(device)
+            gactual_masked = torch.empty((0, 60, dataset_cfg.dimension)).to(device)
+            for seq in range(gmask_seqs.shape[0]):
+                #import pdb; pdb.set_trace();
+                gestimate_recon_only = torch.concatenate((gestimate_recon_only,torch.unsqueeze(gseq_recon[seq], axis=0)), axis=0)
+                gactual_masked = torch.concatenate((gactual_masked ,torch.unsqueeze(gseqs[seq][gmasked_pos[seq]], axis=0)), axis=0)
+            return gestimate_recon_only, gactual_masked
+            
+            
+            #return gseq_recon, gseqs
         
     def func_evaluate(seqs, predict_seqs):
         if args.model_type == 'gaze_mm':
@@ -172,10 +190,10 @@ if __name__ == "__main__":
     args = handle_argv('pretrain_' + mode, 'pretrain.json', mode)    
     
     training_rate = 0.8
-    seed = 2024
+    seed = 27
     tracker = tracking.MLFlowTracker(f"Inference: Seed = {str(seed)}")
     tracker.set_experiment()
-    model_path = './mlruns/488395653435345443/a78cde53c9324f3c9d2b706cff03663e/artifacts/models/'
+    model_path = './mlruns/488395653435345443/fc0b40b4adcb44a9b7a96790a10c45ce/artifacts/models/'
 
     model = mlflow.pytorch.load_model(model_path)
 

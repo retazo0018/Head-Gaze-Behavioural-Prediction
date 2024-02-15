@@ -177,7 +177,7 @@ if __name__ == "__main__":
     
     tracker = tracking.MLFlowTracker("Final")
     tracker.set_experiment()
-
+    seed = 2024
     with mlflow.start_run(description="A MultiModal Transformer"):
         actual_test, estimate_test = main(args, training_rate, tracker)
         gaze_actual_test, gaze_estimate_test, head_actual_test, head_estimate_test  = [], [], [], []
@@ -196,22 +196,22 @@ if __name__ == "__main__":
                 compute_dtw_metric(gaze_estimate_test, gaze_actual_test)+compute_dtw_metric(head_estimate_test, head_actual_test))
 
             datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
-            plot.plot_sequences_3d(gaze_estimate_test, gaze_actual_test, "3D_Spherical_Coord_Gaze_", datestr)
+            plot.plot_sequences_3d(gaze_estimate_test, gaze_actual_test, "3D_Spherical_Coord_Gaze_", datestr, seed)
             tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3D_Spherical_Coord_Gaze_{datestr}.png"))
-            plot.plot_sequences_3d(head_estimate_test, head_actual_test, "3D_Spherical_Coord_Head_", datestr)
+            plot.plot_sequences_3d(head_estimate_test, head_actual_test, "3D_Spherical_Coord_Head_", datestr, seed)
             tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3D_Spherical_Coord_Head_{datestr}.png"))
-            plot.plot_sequences_2d(gaze_estimate_test, gaze_actual_test, "2D_Spherical_Coord_Gaze_", datestr)
+            plot.plot_sequences_2d(gaze_estimate_test, gaze_actual_test, "2D_Spherical_Coord_Gaze_", datestr, seed)
             tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Spherical_Coord_Gaze_{datestr}.png"))
-            plot.plot_sequences_2d(head_estimate_test, head_actual_test, "2D_Spherical_Coord_Head_", datestr)
+            plot.plot_sequences_2d(head_estimate_test, head_actual_test, "2D_Spherical_Coord_Head_", datestr, seed)
             tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Spherical_Coord_Head_{datestr}.png"))
             tracker.log_artifact(args.save_path+'.pt')
         else:
             tracker.log_metrics("Test Euclidean Distance", compute_euclidean_distance(estimate_test, actual_test))
             tracker.log_metrics("Test Dynamic Time Warping", compute_dtw_metric(estimate_test, actual_test))
             datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
-            plot.plot_sequences_3d(estimate_test, actual_test, "3D_Spherical_Coord_Gaze_", datestr)
+            plot.plot_sequences_3d(estimate_test, actual_test, "3D_Spherical_Coord_Gaze_", datestr, seed)
             tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3D_Spherical_Coord_Gaze_{datestr}.png"))
-            plot.plot_sequences_2d(estimate_test, actual_test, "2D_Spherical_Coord_Gaze_", datestr)
+            plot.plot_sequences_2d(estimate_test, actual_test, "2D_Spherical_Coord_Gaze_", datestr), seed
             tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Spherical_Coord_Gaze_{datestr}.png"))
             tracker.log_artifact(args.save_path+'.pt')
 
