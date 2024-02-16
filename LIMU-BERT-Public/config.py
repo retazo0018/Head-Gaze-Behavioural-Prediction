@@ -99,6 +99,7 @@ class DatasetConfig(NamedTuple):
     size: int = 0  # data sample number
     seq_len: int = 0  # seq length
     dimension: int = 0  # feature dimension
+    downsample_ratio: int = 1 # Downsample the original dataset
 
     activity_label_index: int = -1  # index of activity label
     activity_label_size: int = 0  # number of activity label

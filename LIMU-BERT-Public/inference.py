@@ -19,6 +19,7 @@ import mlflow
 from statistic import compute_dtw_metric, compute_levenschtein_distance, compute_euclidean_distance
 from hyperparameter_opt import HyperparameterOptimization
 import itertools
+import mlflow.pytorch
 
 
 def preprocess_one_csv(path, seq_len, downsample_ratio):
@@ -57,51 +58,34 @@ def preprocess_hgbd_dataset(args):
     # np.save("../LIMU-BERT-Public/dataset/hgbd/label_2.npy", np.ones(gaze.shape))
 
 
-def main(args, training_rate, tracker, combination):
+def main(args, training_rate, tracker, model):
     # preprocess_hgbd_dataset(args)
-    lr, batch_size, mask_ratio = combination
-
-    mlflow.log_params({
-        "learning_rate": lr,
-        "batch_size": batch_size,
-        "mask_ratio": mask_ratio
-    })
-
     gdata, hdata, train_cfg, model_cfg, mask_cfg, dataset_cfg = load_pretrain_data_config(args)
-    train_cfg = TrainConfig(seed=18, 
-                        batch_size=batch_size, 
-                        lr=lr, 
-                        n_epochs=5, 
-                        warmup=0.1, 
-                        save_steps=1000, 
-                        total_steps=200000, 
-                        lambda1=0,
-                        lambda2=0) 
     #Setting mask_cfg from hyperparameters:
-    mask_cfg = MaskConfig(mask_ratio=mask_ratio, 
+    mask_cfg = MaskConfig(mask_ratio=mask_cfg.mask_ratio, 
                       mask_alpha=mask_cfg.mask_alpha, 
                       max_gram=mask_cfg.max_gram, 
                       mask_prob=mask_cfg.mask_prob, 
                       replace_prob=mask_cfg.replace_prob)
 
-
-    #import pdb; pdb.set_trace()
     #pipeline = [Preprocess4Normalization(model_cfg.feature_num), Preprocess4Mask(mask_cfg)]
     pipeline = [Preprocess4Mask(mask_cfg)]
     gdata_train, hdata_train, gdata_val, hdata_val, gdata_test, hdata_test = prepare_pretrain_dataset(gdata, hdata, training_rate, seed=train_cfg.seed)
 
     if args.model_type == 'gaze':
         dataset_pretrain = LIBERTGazeDataset4Pretrain
-        model = LIMUBertAEModel4Pretrain(model_cfg)
+        #model = LIMUBertAEModel4Pretrain(model_cfg)
         data_set_train = dataset_pretrain(gdata_train, pipeline=pipeline)
         data_set_val = dataset_pretrain(gdata_val, pipeline=pipeline)
         data_set_test = dataset_pretrain(gdata_test, pipeline=pipeline, istestset=True)
     else:
         dataset_pretrain = LIBERTMultiDataset4Pretrain
         if args.model_type == 'gaze_mm':
-            model = LIMUBertMultiMAEModel4Pretrain(model_cfg,recon_head=False)
+            pass
+            #model = LIMUBertMultiMAEModel4Pretrain(model_cfg,recon_head=False)
         elif args.model_type == 'head_gaze_mm':
-            model = LIMUBertMultiMAEModel4Pretrain(model_cfg,recon_head=True)
+            pass
+            #model = LIMUBertMultiMAEModel4Pretrain(model_cfg,recon_head=True)
         data_set_train = dataset_pretrain(gdata_train, hdata_train, pipeline=pipeline)
         data_set_val = dataset_pretrain(gdata_val, hdata_val, pipeline=pipeline)
         data_set_test = dataset_pretrain(gdata_test, hdata_test, pipeline=pipeline)
@@ -111,7 +95,7 @@ def main(args, training_rate, tracker, combination):
     data_loader_test = DataLoader(data_set_test, shuffle=False, batch_size=train_cfg.batch_size)
     
     criterion = nn.MSELoss(reduction='none')
-    optimizer = torch.optim.Adam(params=model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=train_cfg.lr)
     device = get_device(args.gpu)
     trainer = train.Trainer(train_cfg, model, optimizer, args.save_path, device)
 
@@ -150,7 +134,15 @@ def main(args, training_rate, tracker, combination):
         if args.model_type == 'gaze_mm':
             gmask_seqs, gmasked_pos, gseqs, hmask_seqs, hmasked_pos, hseqs = batch
             gseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
-            return gseq_recon, gseqs
+            
+            gestimate_recon_only = torch.empty((0, 60, dataset_cfg.dimension)).to(device)
+            gactual_masked = torch.empty((0, 60, dataset_cfg.dimension)).to(device)
+            for seq in range(gmask_seqs.shape[0]):
+                #import pdb; pdb.set_trace();
+                gestimate_recon_only = torch.concatenate((gestimate_recon_only,torch.unsqueeze(gseq_recon[seq], axis=0)), axis=0)
+                gactual_masked = torch.concatenate((gactual_masked ,torch.unsqueeze(gseqs[seq], axis=0)), axis=0)
+            return gestimate_recon_only, gactual_masked
+            #return gseq_recon, gseqs
         elif args.model_type == 'head_gaze_mm':
             gmask_seqs, gmasked_pos, gseqs, hmask_seqs, hmasked_pos, hseqs = batch
             gseq_recon, hseq_recon = model(gmask_seqs, hmask_seqs, gmasked_pos)
@@ -158,7 +150,17 @@ def main(args, training_rate, tracker, combination):
         else:
             gmask_seqs, gmasked_pos, gseqs = batch
             gseq_recon = model(gmask_seqs, gmasked_pos)
-            return gseq_recon, gseqs
+            
+            gestimate_recon_only = torch.empty((0, 60, dataset_cfg.dimension)).to(device)
+            gactual_masked = torch.empty((0, 60, dataset_cfg.dimension)).to(device)
+            for seq in range(gmask_seqs.shape[0]):
+                #import pdb; pdb.set_trace();
+                gestimate_recon_only = torch.concatenate((gestimate_recon_only,torch.unsqueeze(gseq_recon[seq], axis=0)), axis=0)
+                gactual_masked = torch.concatenate((gactual_masked ,torch.unsqueeze(gseqs[seq][gmasked_pos[seq]], axis=0)), axis=0)
+            return gestimate_recon_only, gactual_masked
+            
+            
+            #return gseq_recon, gseqs
         
     def func_evaluate(seqs, predict_seqs):
         if args.model_type == 'gaze_mm':
@@ -171,15 +173,9 @@ def main(args, training_rate, tracker, combination):
             gloss_lm = criterion(predict_seqs, seqs)
             return gloss_lm.mean().cpu().numpy()
 
-    tracker.log_parameters(train_cfg, model_cfg, mask_cfg, dataset_cfg)
-    
-    if hasattr(args, 'pretrain_model'):
-        val_loss, test_loss, train_loss = trainer.pretrain(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_val, data_loader_test
-                    , model_file=args.pretrain_model, tracker=tracker)
-    else:
-        val_loss, test_loss, train_loss = trainer.pretrain(func_loss, func_forward, func_evaluate, data_loader_train, data_loader_val, data_loader_test, model_file=None, tracker=tracker)
+    model.eval()
+    test_loss = trainer.run(func_forward, func_evaluate, data_loader_test)
 
-    tracker.log_model(model, "models")
     tracker.log_metrics("Test Loss", test_loss)
 
     estimate_test, actual_test = trainer.run(func_forward, None, data_loader_test, return_labels=True)
@@ -191,51 +187,50 @@ def main(args, training_rate, tracker, combination):
 
 if __name__ == "__main__":
     mode = "base"
-    args = handle_argv('pretrain_' + mode, 'pretrain.json', mode)
+    args = handle_argv('pretrain_' + mode, 'pretrain.json', mode)    
+    
     training_rate = 0.8
-
-    hyperParamOptimization = HyperparameterOptimization('./config/hparams.yaml')
-    params = hyperParamOptimization.get_params()
-
-    tracker = tracking.MLFlowTracker("Gaze_MM_Tuning")
+    seed = 27
+    tracker = tracking.MLFlowTracker(f"Inference: Seed = {str(seed)}")
     tracker.set_experiment()
+    model_path = './mlruns/488395653435345443/fc0b40b4adcb44a9b7a96790a10c45ce/artifacts/models/'
 
-    seed = 2024
-    hyperparameter_combinations = itertools.product(params.T_LR, params.T_BATCHSIZE, params.D_MASKRATIO)
-    for i,combination in enumerate(hyperparameter_combinations):
-        with mlflow.start_run(description="A MultiModal Transformer Gaze Reconstruction"):
-            actual_test, estimate_test = main(args, training_rate, tracker, combination)
+    model = mlflow.pytorch.load_model(model_path)
+
+    with mlflow.start_run(description=f"Inference: {args.model_type}"):
+        actual_test, estimate_test = main(args, training_rate , tracker, model=model)
+        if args.model_type == 'head_gaze_mm':
             gaze_actual_test, gaze_estimate_test, head_actual_test, head_estimate_test  = [], [], [], []
-            if args.model_type == 'head_gaze_mm':
-                seq_len = estimate_test.shape[1]
-                gaze_len = seq_len // 2
-                gaze_estimate_test, head_estimate_test = estimate_test[:,:gaze_len,:], estimate_test[:,gaze_len:,:]
-                gaze_actual_test, head_actual_test = actual_test[:,:gaze_len,:], actual_test[:,gaze_len:,:]
-                tracker.log_metrics("Test Dynamic Time Warping Head", compute_dtw_metric(head_estimate_test, head_actual_test))
-                tracker.log_metrics("Test Euclidean Distance Head", compute_euclidean_distance(head_estimate_test, head_actual_test))
-                tracker.log_metrics("Test Euclidean Distance Gaze", compute_euclidean_distance(gaze_estimate_test, gaze_actual_test))
-                tracker.log_metrics("Test Dynamic Time Warping Gaze", compute_dtw_metric(gaze_estimate_test, gaze_actual_test))
-                tracker.log_metrics("Test Euclidean Distance", 
-                    compute_euclidean_distance(gaze_estimate_test, gaze_actual_test)+compute_euclidean_distance(head_estimate_test, head_actual_test))
-                tracker.log_metrics("Test Dynamic Time Warping", 
-                    compute_dtw_metric(gaze_estimate_test, gaze_actual_test)+compute_dtw_metric(head_estimate_test, head_actual_test))
+            seq_len = estimate_test.shape[1]
+            gaze_len = seq_len // 2
+            gaze_estimate_test, head_estimate_test = estimate_test[:,:gaze_len,:], estimate_test[:,gaze_len:,:]
+            gaze_actual_test, head_actual_test = actual_test[:,:gaze_len,:], actual_test[:,gaze_len:,:]
+            tracker.log_metrics("Test Dynamic Time Warping Head", compute_dtw_metric(head_estimate_test, head_actual_test))
+            tracker.log_metrics("Test Euclidean Distance Head", compute_euclidean_distance(head_estimate_test, head_actual_test))
+            tracker.log_metrics("Test Euclidean Distance Gaze", compute_euclidean_distance(gaze_estimate_test, gaze_actual_test))
+            tracker.log_metrics("Test Dynamic Time Warping Gaze", compute_dtw_metric(gaze_estimate_test, gaze_actual_test))
+            tracker.log_metrics("Test Euclidean Distance", 
+                compute_euclidean_distance(gaze_estimate_test, gaze_actual_test)+compute_euclidean_distance(head_estimate_test, head_actual_test))
+            tracker.log_metrics("Test Dynamic Time Warping", 
+                compute_dtw_metric(gaze_estimate_test, gaze_actual_test)+compute_dtw_metric(head_estimate_test, head_actual_test))
 
-                datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
-                plot.plot_sequences_3d(gaze_estimate_test, gaze_actual_test, "3D_Spherical_Coord_Gaze_", datestr, seed=seed)
-                tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3D_Spherical_Coord_Gaze_{datestr}.png"))
-                plot.plot_sequences_3d(head_estimate_test, head_actual_test, "3D_Spherical_Coord_Head_", datestr, seed=seed)
-                tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3D_Spherical_Coord_Head_{datestr}.png"))
-                plot.plot_sequences_2d(gaze_estimate_test, gaze_actual_test, "2D_Spherical_Coord_Gaze_", datestr, seed=seed)
-                tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Spherical_Coord_Gaze_{datestr}.png"))
-                plot.plot_sequences_2d(head_estimate_test, head_actual_test, "2D_Spherical_Coord_Head_", datestr, seed=seed)
-                tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Spherical_Coord_Head_{datestr}.png"))
-                tracker.log_artifact(args.save_path+'.pt')
-            else:
-                tracker.log_metrics("Test Euclidean Distance", compute_euclidean_distance(estimate_test, actual_test))
-                tracker.log_metrics("Test Dynamic Time Warping", compute_dtw_metric(estimate_test, actual_test))
-                datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
-                plot.plot_sequences_3d(estimate_test, actual_test, "3D_Spherical_Coord_Gaze_", datestr, seed=seed)
-                tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3D_Spherical_Coord_Gaze_{datestr}.png"))
-                plot.plot_sequences_2d(estimate_test, actual_test, "2D_Spherical_Coord_Gaze_", datestr, seed=seed)
-                tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Spherical_Coord_Gaze_{datestr}.png"))
-                tracker.log_artifact(args.save_path+'.pt')
+            datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
+            plot.plot_sequences_3d(gaze_estimate_test, gaze_actual_test, "3D_Spherical_Coord_Gaze_", datestr, seed=seed)
+            tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3D_Spherical_Coord_Gaze_{datestr}.png"))
+            plot.plot_sequences_3d(head_estimate_test, head_actual_test, "3D_Spherical_Coord_Head_", datestr, seed=seed)
+            tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3D_Spherical_Coord_Head_{datestr}.png"))
+            plot.plot_sequences_2d(gaze_estimate_test, gaze_actual_test, "2D_Spherical_Coord_Gaze_", datestr, seed=seed)
+            tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Spherical_Coord_Gaze_{datestr}.png"))
+            plot.plot_sequences_2d(head_estimate_test, head_actual_test, "2D_Spherical_Coord_Head_", datestr, seed=seed)
+            tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Spherical_Coord_Head_{datestr}.png"))
+            tracker.log_artifact(args.save_path+'.pt')
+        else:
+            tracker.log_metrics("Test Euclidean Distance", compute_euclidean_distance(estimate_test, actual_test))
+            tracker.log_metrics("Test Dynamic Time Warping", compute_dtw_metric(estimate_test, actual_test))
+            datestr = datetime.now().strftime("%d.%m.%Y.%H.%M")
+            plot.plot_sequences_3d(estimate_test, actual_test, "3D_Spherical_Coord_Gaze_", datestr, seed=seed)
+            tracker.log_artifact(os.path.join(os.getcwd(), "results", f"3D_Spherical_Coord_Gaze_{datestr}.png"))
+            plot.plot_sequences_2d(estimate_test, actual_test, "2D_Spherical_Coord_Gaze_", datestr, seed=seed)
+            tracker.log_artifact(os.path.join(os.getcwd(), "results", f"2D_Spherical_Coord_Gaze_{datestr}.png"))
+            tracker.log_artifact(args.save_path+'.pt')
+

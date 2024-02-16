@@ -8,8 +8,10 @@
 import numpy as np
 from sklearn import metrics
 from sklearn.metrics import f1_score
-
+from fastdtw import fastdtw
+import Levenshtein
 from plot import plot_matrix
+from scipy.spatial.distance import euclidean
 
 
 def stat_acc_f1(label, results_estimated):
@@ -57,3 +59,24 @@ def stat_acc_f1_tpn(label, label_estimated, task_num=5, threshold=0.5):
     f1 = f1_score(label_new, label_estimated_new, average='macro')
     acc = np.sum(label_new == label_estimated_new) / label_new.size
     return acc, f1
+
+
+def compute_dtw_metric(label, results_estimated):
+    dtw_dist = 0
+    for S in range(len([label[0]])):
+        temp, path = fastdtw(label[S].flatten(), results_estimated[S].flatten())
+        dtw_dist+=temp
+    return dtw_dist
+
+
+def compute_levenschtein_distance(label, results_estimated):
+    lev_distance = Levenshtein.distance(label, results_estimated)
+    return lev_distance
+
+
+def compute_euclidean_distance(label, results_estimated):
+    edist = 0
+    for S in range(len([label[0]])):
+        edist += euclidean(label[S].flatten(), results_estimated[S].flatten())
+    #return np.sum(np.linalg.norm(np.array(label) - np.array(results_estimated), axis=2))
+    return edist

@@ -574,6 +574,44 @@ class BenchmarkTPNClassifier(nn.Module):
     
 
 class LIMUBertMultiMAEModel4Pretrain(nn.Module):
+    def __init__(self, cfg, recon_head=False, output_embed=False):
+        super().__init__()
+        self.embeddings = Embeddings(cfg)
+        self.transformer = Transformer(cfg) # encoder
+        self.fc = nn.Linear(cfg.hidden, cfg.hidden)
+        self.linear = nn.Linear(cfg.hidden, cfg.hidden)
+        self.activ = gelu
+        self.norm = LayerNorm(cfg)
+        self.recon_head = recon_head
+        self.decoder_gaze = nn.Linear(cfg.hidden, cfg.feature_num)
+        self.decoder_head = nn.Linear(cfg.hidden, cfg.feature_num)
+        self.output_embed = output_embed
+        #self.norm_out = LayerNormOut(cfg)
+    
+    def forward(self, gaze_seqs, head_seqs, masked_pos=None):
+        g_tokens = self.embeddings(gaze_seqs)
+        h_tokens = self.embeddings(head_seqs)
+        gh_tokens = torch.cat([g_tokens, h_tokens], dim=1) 
+        encoder_tokens = self.transformer(gh_tokens)
+        if masked_pos is not None:
+            masked_pos = masked_pos[:, :, None].expand(-1, -1, encoder_tokens.size(-1))
+            encoder_tokens = torch.gather(encoder_tokens, 1, masked_pos)
+        
+        encoder_tokens = self.activ(self.linear(encoder_tokens))
+        encoder_tokens = self.norm(encoder_tokens)
+        
+        # Decode tokens for each task using task-specific output decoders
+        g_preds = self.decoder_gaze(encoder_tokens)
+        g_norm = torch.norm(g_preds, p=2, dim=-1, keepdim=True) 
+        if not self.recon_head:
+            return g_preds / g_norm
+        else:
+            h_preds = self.decoder_head(encoder_tokens)
+            h_norm = torch.norm(h_preds, p=2, dim=-1, keepdim=True) 
+            return g_preds / g_norm, h_preds / h_norm
+            
+
+class LIMUBertAEModel4Pretrain(nn.Module):
     def __init__(self, cfg, output_embed=False):
         super().__init__()
         self.embeddings = Embeddings(cfg)
@@ -585,15 +623,12 @@ class LIMUBertMultiMAEModel4Pretrain(nn.Module):
         self.decoder = nn.Linear(cfg.hidden, cfg.feature_num)
         self.output_embed = output_embed
     
-    def forward(self, gaze_seqs, head_seqs, masked_pos=None):
-        # Get Tokens from raw data
+    def forward(self, gaze_seqs, masked_pos=None):
         g_tokens = self.embeddings(gaze_seqs)
-        h_tokens = self.embeddings(head_seqs)
-        gh_tokens = torch.cat([g_tokens, h_tokens], dim=1) 
-
-        # Transformer forward pass
-        encoder_tokens = self.transformer(gh_tokens)
-
+        #Validate Tokens
+        # print(f'g_tokens: {g_tokens}, g_tokens.shape: {g_tokens.shape}')
+        #gh_tokens = torch.cat([g_tokens, h_tokens], dim=1) 
+        encoder_tokens = self.transformer(g_tokens)
         if masked_pos is not None:
             masked_pos = masked_pos[:, :, None].expand(-1, -1, encoder_tokens.size(-1))
             encoder_tokens = torch.gather(encoder_tokens, 1, masked_pos)
@@ -602,9 +637,9 @@ class LIMUBertMultiMAEModel4Pretrain(nn.Module):
         encoder_tokens = self.norm(encoder_tokens)
         
         # Decode tokens for each task using task-specific output decoders
-        gpreds = self.decoder(encoder_tokens)
-        return gpreds
-
+        g_preds = self.decoder(encoder_tokens)
+        g_norm = torch.norm(g_preds, p=2, dim=-1, keepdim=True) 
+        return g_preds / g_norm
 
 def fetch_classifier(method, model_cfg, input=None, output=None, feats=False):
     if 'lstm' in method:

@@ -4,4 +4,9 @@ LIMU-BERT-Public/dataset/hhar/
 LIMU-BERT-Public/dataset/motion/
 LIMU-BERT-Public/dataset/shoaib/
 LIMU-BERT-Public/dataset/uci/
+LIMU-BERT-Public/dataset/hgbd_bk/
 LIMU-BERT-Public/saved/
+.DS_Store
+LIMU-BERT-Public/results/
+mlruns/
+LIMU-BERT-Public/.DS_Store

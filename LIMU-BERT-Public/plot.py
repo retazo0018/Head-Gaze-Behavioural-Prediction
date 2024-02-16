@@ -14,6 +14,7 @@ from sklearn import metrics
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from matplotlib import pyplot
+import random
 
 SENSORS = ["Accelerometer", "Gyroscope", "Magnetometer"]
 SENSOR_NAMES = ['ACC-X', 'ACC-Y', 'ACC-Z', 'GYRO-X', 'GYRO-Y', 'GYRO-Z', 'MAG-X', 'MAG-Y', 'MAG-Z']
@@ -112,7 +113,7 @@ def plot_reconstruct_sensor(sensors, sensors_re, sensor_dimen=3):
             axs[i].plot(x, sensors[:, dimen], label=SENSOR_NAMES[dimen], linestyle=LINE_STYLES[0], color=COLOR_LIST[j]) #
             axs[i].plot(x, sensors_re[:, dimen], label=SENSOR_NAMES[dimen], linestyle=LINE_STYLES[1], color=COLOR_LIST[j])
     plt.show()
-
+    
 
 def plot_roc_auc(y_pred, y_true):
     auc = metrics.roc_auc_score(y_true, y_pred)
@@ -125,6 +126,173 @@ def plot_roc_auc(y_pred, y_true):
     return fpr, tpr, thre
 
 
+def plot3DLine(preds, labels, fname, datestr, n=200):
+    # Randomly choosing n vectors from the training data:
+    indexes = np.random.choice(preds.shape[0],n, replace = False)
+    preds_3d = preds[indexes,:]
+    labels_3d = labels[indexes,:]
+    fig = plt.figure(figsize=(12, 6))
+
+    # Output Vectors
+    ax1 = fig.add_subplot(1, 2, 1, projection='3d')
+    for sequence in preds_3d:
+        ax1.scatter(sequence[:, 0], sequence[:, 1], sequence[:, 2])
+    ax1.set_title('Generated Data')
+    ax1.set_xlabel('X')
+    ax1.set_ylabel('Y')
+    ax1.set_zlabel('Z')
+
+    # Training/Test Vectors
+    ax2 = fig.add_subplot(1, 2, 2, projection='3d')
+    for sequence in labels_3d:
+        ax2.scatter(sequence[:, 0], sequence[:, 1], sequence[:, 2])
+    ax2.set_title('Actual Data')
+    ax2.set_xlabel('X')
+    ax2.set_ylabel('Y')
+    ax2.set_zlabel('Z')
+    plt.savefig("./results/"+fname+datestr+".png")
 
 
-# if __name__ == "__main__":
+def plot3DPCA(preds, labels):
+    preds_reshaped = preds.reshape(preds.shape[0], -1)
+    labels_reshaped = labels.reshape(labels.shape[0], -1)
+    pca = PCA(n_components=3)
+    preds_3d = pca.fit_transform(preds_reshaped)
+    labels_3d = pca.transform(labels_reshaped)
+
+    # Plotting the results
+    fig = plt.figure(figsize=(12, 6))
+
+    # Output Vectors
+    ax1 = fig.add_subplot(1, 2, 1, projection='3d')
+    ax1.scatter(preds_3d[:, 0], preds_3d[:, 1], preds_3d[:, 2], color='blue', alpha=0.5)
+    ax1.set_title('Output Vectors (3D PCA)')
+    ax1.set_xlabel('PCA Component 1')
+    ax1.set_ylabel('PCA Component 2')
+    ax1.set_zlabel('PCA Component 3')
+
+    # Training Vectors
+    ax2 = fig.add_subplot(1, 2, 2, projection='3d')
+    ax2.scatter(labels_3d[:, 0], labels_3d[:, 1], labels_3d[:, 2], color='green', alpha=0.5)
+    ax2.set_title('Training Vectors (3D PCA)')
+    ax2.set_xlabel('PCA Component 1')
+    ax2.set_ylabel('PCA Component 2')
+    ax2.set_zlabel('PCA Component 3')
+
+    plt.show()
+
+
+def plot2DPCA(preds, labels, fname, datestr, n=200):
+    indexes = np.random.choice(preds.shape[0],n, replace = False)
+    preds_reshaped = preds.reshape(preds.shape[0], -1)
+    labels_reshaped = labels.reshape(labels.shape[0], -1)
+    pca = PCA(n_components=2)
+    preds_2d = pca.fit_transform(preds_reshaped[indexes,:])
+    labels_2d = pca.transform(labels_reshaped[indexes,:])
+
+    plt.figure(figsize=(12, 6))
+
+    plt.subplot(1, 2, 1)
+    plt.scatter(preds_2d[:, 0], preds_2d[:, 1], color='blue', alpha=0.5, label='Output Vectors')
+    plt.title('Output Vectors (PCA-reduced)')
+    plt.xlabel('PCA Component 1')
+    plt.ylabel('PCA Component 2')
+
+    plt.subplot(1, 2, 2)
+    plt.scatter(labels_2d[:, 0], labels_2d[:, 1], color='green', alpha=0.5, label='Training Vectors')
+    plt.title('Training Vectors (PCA-reduced)')
+    plt.xlabel('PCA Component 1')
+    plt.ylabel('PCA Component 2')
+
+    plt.tight_layout()
+    plt.savefig("./results/"+fname+datestr+".png")
+
+
+def spherical_to_cartesian(spherical_coords):
+    # Convert spherical coordinates (theta, phi) to cartesian coordinates (x, y, z)
+    theta, phi = spherical_coords[:, 0], spherical_coords[:, 1]
+    x = np.sin(phi) * np.cos(theta)
+    y = np.sin(phi) * np.sin(theta)
+    z = np.cos(phi)
+    return x, y, z
+
+def plot_sequences_3d(preds, labels, fname, datestr, n=16, seed=42):
+    random.seed(seed)
+    ind = random.sample(range(preds.shape[0]), n)
+    to_visualize_preds, to_visualize_labels = preds[ind], labels[ind]
+
+    num_rows = int(np.ceil(np.sqrt(n)))
+    num_cols = int(np.ceil(n / num_rows))
+
+    fig = plt.figure(figsize=(15, 10))
+
+    for i in range(n):
+        ax = fig.add_subplot(num_rows, num_cols, i+1, projection='3d')
+        x_pred, y_pred, z_pred = spherical_to_cartesian(to_visualize_preds[i])
+        x_label, y_label, z_label = spherical_to_cartesian(to_visualize_labels[i])
+
+        # Plot predictions
+        ax.scatter(x_pred, y_pred, z_pred, color='blue', label='Predicted Gaze')
+
+        # Plot labels
+        ax.scatter(x_label, y_label, z_label, color='red', label='Actual Gaze')
+
+        # Setting plot title
+        ax.set_title(f'Seq {ind[i]}')
+
+        # Hide axes ticks
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_zticks([])
+
+    # Adding a legend
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(handles, labels, loc='upper center')
+
+
+    plt.savefig("./results/"+fname+datestr+".png")
+
+
+
+def plot_sequences_2d(preds, labels, fname, datestr, n=16, seed=42):
+    random.seed(seed)
+    ind = random.sample(range(preds.shape[0]), n)
+    to_visualize_preds, to_visualize_labels = preds[ind], labels[ind]
+
+    num_rows = int(np.ceil(np.sqrt(n)))
+    num_cols = int(np.ceil(n / num_rows))
+
+    fig = plt.figure(figsize=(15, 10))
+
+    for i in range(n):
+        theta_pred = to_visualize_preds[i,:,0]
+        phi_pred = to_visualize_preds[i,:,1]
+        theta_label = to_visualize_labels[i,:,0]
+        phi_label = to_visualize_labels[i,:,1]
+
+        ax = fig.add_subplot(num_rows, num_cols, i+1)
+        
+        time_x = range(theta_pred.shape[-1])
+
+        # Plot predictions
+        ax.plot(time_x, theta_pred, color='blue', label='Predicted Gaze Theta')
+        ax.plot(time_x, phi_pred, color='green', label='Predicted Gaze Phi')
+        # Plot labels
+        ax.plot(time_x, theta_label, color='red', label='Actual Gaze Theta')
+        ax.plot(time_x, phi_label, color='yellow', label='Actual Gaze Phi')
+
+        #ax.set_xlabel('Time')
+        ax.set_ylabel('Angle')
+
+        # Setting plot title
+        ax.set_title(f'Seq {ind[i]}')
+
+        # Hide axes ticks
+        ax.set_xticks([])
+        ax.set_yticks([])
+    # Adding a legend
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(handles, labels, loc='upper center')
+
+
+    plt.savefig("./results/"+fname+datestr+".png")
