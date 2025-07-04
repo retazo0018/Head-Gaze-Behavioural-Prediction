@@ -13,7 +13,7 @@ In eye tracking systems, missing values in gaze data due to blinks, pupil detect
 ## Methodology
 The Masked Language Model (MLM) task involves masking
 individual tokens in a sequence and training the model to predict the masked tokens based on the surrounding context.
-![Architecture Diagram](docs/architecture_diagram.png)
+![Architecture Diagram](Docs/architecture_diagram.png)
 
 ## Codebase
 
@@ -31,7 +31,7 @@ individual tokens in a sequence and training the model to predict the masked tok
 
 ## Results
 Reconstruction of Gaze data using the learnt joint distribution on test dataset is shown below.
-![Reconstruction](docs/result_reconstruction.png)
+![Reconstruction](Docs/result_reconstruction.png)
 
 Comparison of Model Performance against the baselines is shown below,
-![Model_Comparison](docs/model_comparison.png)
+![Model_Comparison](Docs/model_comparison.png)
