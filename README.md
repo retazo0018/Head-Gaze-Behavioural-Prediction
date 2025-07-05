@@ -8,7 +8,7 @@ In eye tracking systems, missing values in gaze data due to blinks, pupil detect
 - Evaluate the method of filling the missing gaze samples, increasing data efficiency, and increasing the performance of down-stream tasks.
 
 ### State of the Arts
-- LIMU-BERT is a novel representation learning model that can make use of unlabeled IMU data and extract generalized rather than task-specific features. 
+- [LIMU-BERT](https://github.com/dapowan/LIMU-BERT-Public) is a novel representation learning model that can make use of unlabeled IMU data and extract generalized rather than task-specific features. 
 -  LIMU-BERT adopts the principle of natural language model BERT to effectively capture temporal relations and feature distributions in IMU sensor data. 
 - With the representations learned via LIMU-BERT, task-specific models trained with limited labeled samples can achieve superior performances. 
 
